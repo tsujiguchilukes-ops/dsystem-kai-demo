@@ -134,28 +134,25 @@
   function recalcReportRow(cast) {
     const row = document.querySelector('#content tr[data-rrow="' + cssEsc(cast) + '"]');
     if (!row) return;
-    const base = (DATA.day0824.attendance || []).find(function (a) { return a.cast === cast; });
-    if (!base) return;
+    const found = (DATA.day0824.attendance || []).find(function (a) { return a.cast === cast; });
+    const base = found || { cast: cast, start: '', end: null, drinks: [], req: { count: 0 }, dohan: { count: 0 }, field: { count: 0 } };
     const get = function (f) { const el = row.querySelector('[data-rfield="' + f + '"]'); return el ? el.value : ''; };
+    const n = function (f) { const v = Number((get(f) || '').trim() || 0); return Number.isFinite(v) && v >= 0 ? v : NaN; };
     const att = JSON.parse(JSON.stringify(base));
     att.start = get('start') || att.start;
     const end = get('end'); att.end = end && end.trim() ? end.trim() : null;
-    const bCell = row.querySelector('.r-back'), wCell = row.querySelector('.r-welfare'), nCell = row.querySelector('.r-net');
+    const bCell = row.querySelector('.r-back'), wCell = row.querySelector('.r-welfare'), gCell = row.querySelector('.r-gross'), nCell = row.querySelector('.r-net');
     try {
-      const dpRaw = (get('dailyPay') || '').trim();
-      if (dpRaw === '') att.dailyPay = 0;
-      else {
-        const dp = Number(dpRaw);
-        if (!Number.isFinite(dp) || dp < 0) throw new Error('日払いが不正です: ' + dpRaw);
-        att.dailyPay = dp;
-      }
+      const dp = n('dailyPay'), late = n('late'), ab = n('absent'), pk = n('pickup'), bo = n('bonus');
+      if ([dp, late, ab, pk, bo].some(function (x) { return !Number.isFinite(x); })) throw new Error('数値の入力が不正です');
+      att.dailyPay = dp; att.minus = late + ab + pk; att.bonus = bo;
       const p = CALC.castPayroll(att);
       bCell.textContent = p.back.toLocaleString('ja-JP');
+      if (gCell) gCell.textContent = p.gross.toLocaleString('ja-JP');
       wCell.textContent = p.welfare.toLocaleString('ja-JP');
       nCell.textContent = p.net.toLocaleString('ja-JP'); nCell.style.color = p.net < 0 ? '#ff5c5c' : '';
     } catch (e) {
-      nCell.textContent = '入力エラー'; nCell.style.color = '#ff5c5c';
-      nCell.title = String(e && e.message || e);
+      nCell.textContent = '入力エラー'; nCell.style.color = '#ff5c5c'; nCell.title = String(e && e.message || e);
     }
   }
   function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
@@ -313,6 +310,67 @@
   }
 
   function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('backdrop').classList.remove('on'); }
+
+  // ===== モーダル（伝票明細入力など）=====
+  function modal(title, bodyHtml, onOk, okLabel) {
+    closeModal();
+    const wrap = document.createElement('div'); wrap.id = 'modalWrap'; wrap.className = 'modalwrap';
+    wrap.innerHTML = '<div class="modal"><div class="mhead"><b>' + esc(title) + '</b><button class="hx" id="mClose">✕</button></div>'
+      + '<div class="mbody">' + bodyHtml + '</div>'
+      + '<div class="mfoot"><button class="btn" id="mCancel">キャンセル</button><button class="btn gold" id="mOk">' + esc(okLabel || '登録') + '</button></div></div>';
+    document.body.appendChild(wrap);
+    document.getElementById('mClose').onclick = closeModal;
+    document.getElementById('mCancel').onclick = closeModal;
+    document.getElementById('mOk').onclick = function () { if (onOk) onOk(); };
+    wrap.addEventListener('click', function (e) { if (e.target === wrap) closeModal(); });
+  }
+  function closeModal() { const m = document.getElementById('modalWrap'); if (m) m.remove(); }
+  function newBill() {
+    const castOpts = DATA.casts.map(function (c) { return '<option>' + esc(c.name) + '</option>'; }).join('');
+    const prodOpts = DATA.products.filter(function (p) { return p.price > 0; }).map(function (p) { return '<option value="' + esc(p.name) + '">' + esc(p.name) + ' (' + yen(p.price) + ')</option>'; }).join('');
+    const tagOpts = '<option value="">なし</option>' + DATA.tags.map(function (t) { return '<option>' + esc(t.name) + '</option>'; }).join('');
+    const g = function (l, f) { return '<div style="margin-bottom:10px"><label>' + l + '</label><br>' + f + '</div>'; };
+    const body =
+      '<div class="row" style="gap:12px">'
+      + '<div style="flex:1;min-width:120px">' + g('卓番号', '<input id="nbTable" type="number" min="1" value="1" style="width:100%">') + '</div>'
+      + '<div style="flex:1;min-width:120px">' + g('客数', '<input id="nbGuests" type="number" min="1" value="1" style="width:100%">') + '</div>'
+      + '<div style="flex:1;min-width:120px">' + g('入店', '<input id="nbIn" type="text" value="21:00" style="width:100%">') + '</div>'
+      + '<div style="flex:1;min-width:120px">' + g('退店', '<input id="nbOut" type="text" value="23:00" style="width:100%">') + '</div>'
+      + '</div>'
+      + '<div class="row" style="gap:12px">'
+      + '<div style="flex:1;min-width:150px">' + g('タグ(集客)', '<select id="nbTag">' + tagOpts + '</select>') + '</div>'
+      + '<div style="flex:1;min-width:150px">' + g(t('本指名') + 'キャスト', '<select id="nbReqCast">' + castOpts + '</select>') + '</div>'
+      + '<div style="flex:1;min-width:110px">' + g(t('本指名') + '回数', '<input id="nbReq" type="number" min="0" value="0" style="width:100%">') + '</div>'
+      + '<div style="flex:1;min-width:110px">' + g(t('同伴') + '回数', '<input id="nbDohan" type="number" min="0" value="0" style="width:100%">') + '</div>'
+      + '</div>'
+      + '<div class="row" style="gap:12px">'
+      + '<div style="flex:1;min-width:150px">' + g('商品', '<select id="nbProd">' + prodOpts + '</select>') + '</div>'
+      + '<div style="flex:1;min-width:110px">' + g('個数', '<input id="nbQty" type="number" min="0" value="0" style="width:100%">') + '</div>'
+      + '<div style="flex:1;min-width:120px">' + g('サービス料', '<input id="nbSvc" type="number" min="0" value="0" style="width:100%">') + '</div>'
+      + '<div style="flex:1;min-width:120px">' + g('値引き', '<input id="nbDisc" type="number" min="0" value="0" style="width:100%">') + '</div>'
+      + '</div>'
+      + '<div class="row" style="gap:12px">'
+      + '<div style="flex:1;min-width:150px">' + g('現金', '<input id="nbCash" type="number" min="0" value="0" style="width:100%">') + '</div>'
+      + '<div style="flex:1;min-width:150px">' + g('カード', '<input id="nbCard" type="number" min="0" value="0" style="width:100%">') + '</div>'
+      + '</div>'
+      + '<div class="muted-note">指名回数×バック額、商品個数×単価×バック率が、勤怠報告の給与に自動反映されます。</div>';
+    modal('新規伝票（明細入力）', body, function () {
+      const v = function (id) { return document.getElementById(id).value; };
+      const nv = function (id) { return Number(v(id)) || 0; };
+      const prod = v('nbProd'), qty = nv('nbQty');
+      const bill = {
+        no: (DATA.day0824.bills.length + 1), uuid: 'NEW-' + Date.now().toString(16).toUpperCase(),
+        in: v('nbIn'), out: v('nbOut'), table: nv('nbTable'), guests: nv('nbGuests'),
+        req: nv('nbReq') ? [{ cast: v('nbReqCast'), count: nv('nbReq'), amount: 0 }] : [],
+        dohan: nv('nbDohan') ? [{ cast: v('nbReqCast'), count: nv('nbDohan'), amount: 0 }] : [], field: [],
+        items: qty ? [{ name: prod, qty: qty }] : [],
+        service: nv('nbSvc'), discount: nv('nbDisc'), tag: v('nbTag'),
+        cash: nv('nbCash'), card: nv('nbCard'), credit: 0, settled: false,
+      };
+      DATA.day0824.bills.push(bill);
+      closeModal(); toast('伝票を登録しました（№' + bill.no + '）'); render('bills');
+    }, '登録する');
+  }
 
   // ===== 現場向け ヘルプチャット（使い方を質問）=====
   // アプリを熟知したアシスタントの回答ナレッジ（キーワード一致）
@@ -482,7 +540,7 @@
     }, btn);
   }
   global.APP = { go: go, goSub: goSub, toast: toast, backupExport: backupExport, backupImport: backupImport, voiceCommand: voiceCommand, voiceField: voiceField,
-    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo };
+    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })(typeof window !== "undefined" ? window : globalThis);
