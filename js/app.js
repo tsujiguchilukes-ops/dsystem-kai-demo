@@ -325,6 +325,67 @@
     wrap.addEventListener('click', function (e) { if (e.target === wrap) closeModal(); });
   }
   function closeModal() { const m = document.getElementById('modalWrap'); if (m) m.remove(); }
+
+  // ===== 実CSV出力 / PDF印刷 =====
+  function csvDownload(name, csv) {
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }); // BOM付き=Excelで文字化けしない
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  }
+  function tableToCsv(table) {
+    return Array.prototype.map.call(table.querySelectorAll('tr'), function (tr) {
+      return Array.prototype.map.call(tr.querySelectorAll('th,td'), function (c) {
+        const inp = c.querySelector('input,select'); const v = inp ? inp.value : c.textContent.trim();
+        return '"' + String(v).replace(/"/g, '""') + '"';
+      }).join(',');
+    }).join('\r\n');
+  }
+  function exportCSV(kind) {
+    const tables = document.querySelectorAll('#content table');
+    if (!tables.length) { toast('出力できる表がありません'); return; }
+    const csv = Array.prototype.map.call(tables, tableToCsv).join('\r\n\r\n');
+    csvDownload((kind || 'export') + '_2026-08.csv', csv); toast('CSVを書き出しました（Excelで開けます）');
+  }
+  function newCustomer() {
+    const castOpts = '<option value="">なし</option>' + DATA.casts.map(function (c) { return '<option>' + esc(c.name) + '</option>'; }).join('');
+    const g = function (l, f) { return '<div style="flex:1;min-width:150px;margin-bottom:10px"><label>' + l + '</label><br>' + f + '</div>'; };
+    const body = '<div class="row" style="gap:12px">'
+      + g('名前', '<input id="ncName" type="text" style="width:100%">')
+      + g('あだ名', '<input id="ncNick" type="text" style="width:100%">')
+      + g('紹介元', '<input id="ncRef" type="text" style="width:100%">')
+      + g('電話番号', '<input id="ncTel" type="text" style="width:100%">')
+      + g('担当キャスト', '<select id="ncMain">' + castOpts + '</select>')
+      + g('会社名', '<input id="ncCorp" type="text" style="width:100%">')
+      + '</div>';
+    modal('新規お客さま', body, function () {
+      const v = function (id) { return document.getElementById(id).value; };
+      if (!v('ncName').trim()) { toast('名前を入力してください'); return; }
+      DATA.customers.push({ no: DATA.customers.length + 1, name: v('ncName'), rank: 'C', visits: 0, last: '—', first: '2026-08-25', avg: 0, main: v('ncMain'), attrs: ['新規'], phone: v('ncTel') });
+      closeModal(); toast('お客さまを登録しました'); render('customers', 'list');
+    }, '登録する');
+  }
+  function copyTable() {
+    const tb = document.querySelector('#content table'); if (!tb) { toast('コピーする表がありません'); return; }
+    const tsv = Array.prototype.map.call(tb.querySelectorAll('tr'), function (tr) {
+      return Array.prototype.map.call(tr.querySelectorAll('th,td'), function (c) { return c.textContent.trim(); }).join('\t');
+    }).join('\n');
+    if (navigator.clipboard) navigator.clipboard.writeText(tsv).then(function () { toast('コピーしました'); }, function () { toast('コピーに失敗'); });
+    else toast('このブラウザはコピー未対応');
+  }
+  function printPaySlip(kind) {
+    const tables = document.querySelectorAll('#content table');
+    let inner = '';
+    Array.prototype.forEach.call(tables, function (tb) { inner += tb.outerHTML; });
+    const w = window.open('', '_blank', 'width=900,height=1000');
+    if (!w) { toast('ポップアップを許可してください'); return; }
+    w.document.write('<!DOCTYPE html><meta charset="utf-8"><title>報酬明細 2026年8月</title>'
+      + '<style>body{font-family:"Hiragino Sans",sans-serif;padding:24px;color:#22271d}'
+      + 'h1{font-size:20px}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:10px}'
+      + 'th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}th,td:first-child{text-align:left}'
+      + '@media print{button{display:none}}</style>'
+      + '<h1>報酬明細 — ' + (kind === 'staff' ? 'スタッフ' : 'キャスト') + ' / 2026年8月（Lounge）</h1>'
+      + '<button onclick="print()" style="padding:8px 16px;margin:8px 0">印刷 / PDF保存</button>' + inner);
+    w.document.close(); setTimeout(function () { try { w.print(); } catch (e) {} }, 400);
+  }
   function newBill() {
     const castOpts = DATA.casts.map(function (c) { return '<option>' + esc(c.name) + '</option>'; }).join('');
     const prodOpts = DATA.products.filter(function (p) { return p.price > 0; }).map(function (p) { return '<option value="' + esc(p.name) + '">' + esc(p.name) + ' (' + yen(p.price) + ')</option>'; }).join('');
@@ -540,7 +601,7 @@
     }, btn);
   }
   global.APP = { go: go, goSub: goSub, toast: toast, backupExport: backupExport, backupImport: backupImport, voiceCommand: voiceCommand, voiceField: voiceField,
-    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill };
+    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })(typeof window !== "undefined" ? window : globalThis);

@@ -222,7 +222,22 @@
     },
   };
 
+  // ---- デモ顧客・キープ（顧客管理/キープ管理の画面用・架空）----
+  const customers = [
+    { no: 1, name: "山本 様", rank: "S", visits: 24, last: "2026-08-22", first: "2025-03-10", avg: 42000, main: "みお🌙", attrs: ["常連", "太客候補", "高単価"], phone: "090-xxxx-1234" },
+    { no: 2, name: "中村 様", rank: "A", visits: 12, last: "2026-08-20", first: "2025-07-02", avg: 28000, main: "あや☆", attrs: ["リピート", "本指名安定"], phone: "090-xxxx-5678" },
+    { no: 3, name: "小林 様", rank: "B", visits: 6, last: "2026-08-15", first: "2026-02-18", avg: 19000, main: "さくら🌻", attrs: ["場内多め"], phone: "" },
+    { no: 4, name: "加藤 様", rank: "C", visits: 3, last: "2026-08-08", first: "2026-06-30", avg: 15000, main: "ひな❄️", attrs: ["新規", "呼び戻し候補"], phone: "" },
+    { no: 5, name: "渡辺 様", rank: "D", visits: 0, last: "2026-05-01", first: "2025-01-12", avg: 12000, main: "", attrs: ["休眠", "要フォロー"], phone: "" },
+  ];
+  const keeps = [
+    { product: "ヴーヴロゼ", price: 30000, remain: "1/2本", start: "2026-08-08", expire: "2026-11-08", customer: "山本 様", nameTag: "T.T", memo: "誕生日用" },
+    { product: "モエN.I.R", price: 35000, remain: "満量", start: "2026-08-21", expire: "2026-11-21", customer: "中村 様", nameTag: "S", memo: "" },
+    { product: "ジャックダニエル", price: 15000, remain: "残少", start: "2026-06-01", expire: "2026-09-01", customer: "小林 様", nameTag: "SUZUKI", memo: "期限間近" },
+  ];
+
   global.DATA = {
+    customers: customers, keeps: keeps,
     store, terms, t, casts, staff, products, costItems, feeItems, tags,
     customerAttributes, customerFields, rankThresholds, keepDefaultMonths,
     financeDaily, monthSummary, itemTotals, itemDaily, itemDailyCols, day0824,

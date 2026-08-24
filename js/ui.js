@@ -102,7 +102,7 @@
       + kpi('経費', yen(agg.expenseTotal), '#ff5c5c', ser('expenseTotal')) + kpi('粗利', yen(agg.grossProfit), '#3fb950', ser('grossProfit')) + '</div>';
     h += '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">'
       + '<div class="seg"><button class="on">月次</button><button onclick="APP.toast(\'日次はデモ対象外\')">日次</button></div>'
-      + '<div><button class="btn sm" onclick="APP.toast(&#39;Excel出力はデモ対象外&#39;)">Excel</button> <button class="btn sm" onclick="APP.toast(&#39;Excel出力はデモ対象外&#39;)">Excel(All)</button> <button class="btn sm ghost" onclick="APP.toast(&#39;デモ対象外&#39;)">旧Excel</button></div></div>';
+      + '<div><button class="btn sm" onclick="APP.exportCSV(&#39;balance&#39;)">Excel</button> <button class="btn sm" onclick="APP.exportCSV(&#39;balance&#39;)">Excel(All)</button> <button class="btn sm ghost" onclick="APP.exportCSV(&#39;balance&#39;)">旧Excel</button></div></div>';
     // ヒートマップ（粗利）
     h += '<div class="card" style="margin-bottom:16px"><h3>曜日別 粗利ヒートマップ</h3>' + heatmap(rows) + '</div>';
     // テーブル
@@ -175,6 +175,17 @@
       + kpi('未精算', yen(d.expected.unsettled), '#f0a02c')
       + kpi('精算済', yen(d.expected.settled), '#3fb950')
       + kpi('女子給料', yen(d.expected.joshiPay), '#ff8fbf') + '</div>';
+    // 営業日報（当日/未精算/精算済 の3列比較・本家同等）
+    const report3 = [
+      ['総売上', 55200, 47900, 7300], ['現金売上', 47900, 47900, 0], ['カード売上', 7300, 0, 7300], ['売掛', 0, 0, 0],
+      ['女子売上', 47900, 47900, 0], ['女子給料', 6840, 0, 0],
+    ];
+    h += '<div class="card" style="margin-bottom:16px"><h3>営業日報</h3><div class="tablewrap"><table><thead><tr><th class="l">項目</th><th>当日</th><th>未精算</th><th>精算済</th></tr></thead><tbody>'
+      + report3.map(function (r) { return '<tr><td class="l">' + r[0] + '</td><td>' + yen(r[1]) + '</td><td>' + yen(r[2]) + '</td><td>' + yen(r[3]) + '</td></tr>'; }).join('')
+      + '<tr><td class="l">客組人数</td><td>3組4名</td><td>2組3名</td><td>1組1名</td></tr>'
+      + '<tr><td class="l">客単価</td><td>' + yen(13800) + '</td><td>' + yen(15967) + '</td><td>' + yen(7300) + '</td></tr>'
+      + '<tr><td class="l">キャスト数</td><td>出勤3人</td><td>店内客3人</td><td>待機—</td></tr>'
+      + '</tbody></table></div><div class="muted-note">「まとめ」は精算済ベース、リアルタイムは未精算(進行中の伝票)も含む。</div></div>';
     // 出勤キャスト
     h += '<div class="card" style="margin-bottom:16px"><h3>現在出勤キャスト</h3><div class="row">'
       + d.attendance.map(function (a) {
@@ -262,18 +273,40 @@
       + '個 等（22〜31日は元画面が見切れのため、完全一致には残り日のスクショが必要）。</div>';
     return h;
   }
+  // 合計を配分（最大剰余法で整数・合計一致）
+  function distribute(total, shares) {
+    const sum = shares.reduce(function (a, b) { return a + b; }, 0) || 1;
+    const raw = shares.map(function (s) { return total * s / sum; });
+    const base = raw.map(Math.floor); let rem = total - base.reduce(function (a, b) { return a + b; }, 0);
+    const order = raw.map(function (v, i) { return [i, v - Math.floor(v)]; }).sort(function (a, b) { return b[1] - a[1]; });
+    for (let i = 0; i < rem; i++) base[order[i % order.length][0]]++;
+    return base;
+  }
   function castItems() {
-    // キャスト別 キャストドリンクS 個数（観測値）
-    const rows = [['みお🌙', 172], ['あや☆', 123], ['さくら🌻', 83], ['ひな❄️', 49], ['のあ☆', 47], ['ゆい☆', 46], ['まや🎣', 44], ['れい🔔', 36], ['かな🍖', 17]];
-    const max = rows[0][1];
-    let h = '<div class="seg" style="margin-bottom:14px"><button onclick="APP.go(\'items\')">商品別</button><button class="on">キャスト別</button></div>';
-    h += '<div class="card"><h3>キャスト別 キャストドリンクS 販売数（2026年8月）</h3>';
-    rows.forEach(function (e, i) {
-      h += '<div class="rank"><div class="no ' + (i === 0 ? 'g1' : '') + '">' + (i + 1) + '</div><div style="width:120px">' + e[0] + '</div>'
-        + '<div class="bar"><i style="width:' + (e[1] / max * 100) + '%"></i></div><div style="width:60px;text-align:right">' + e[1] + '個</div>'
-        + '<div style="width:110px;text-align:right" class="mut">' + yen(e[1] * 1000) + '</div></div>';
+    // 実績のある商品 × キャスト9人 の完全クロス集計（個数）。CDrinkS実測シェアで各商品を配分。
+    const share = { "みお🌙": 172, "あや☆": 123, "さくら🌻": 83, "ひな❄️": 49, "のあ☆": 47, "ゆい☆": 46, "まや🎣": 44, "れい🔔": 36, "かな🍖": 17 };
+    const castNames = Object.keys(share);
+    const prods = Object.keys(D.itemTotals);
+    // grid[cast][prod]
+    const grid = {}; castNames.forEach(function (c) { grid[c] = {}; });
+    prods.forEach(function (pn) {
+      const alloc = distribute(D.itemTotals[pn], castNames.map(function (c) { return share[c]; }));
+      castNames.forEach(function (c, i) { grid[c][pn] = alloc[i]; });
     });
-    return h + '</div>';
+    let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">'
+      + '<div class="seg"><button onclick="APP.go(\'items\')">商品別</button><button class="on">キャスト別</button></div>'
+      + '<div><label style="margin-right:8px"><input type="checkbox" style="width:auto;min-height:auto"> 0個を除外</label>'
+      + '<button class="btn sm" onclick="APP.exportCSV(&#39;castitem&#39;)">Excel</button></div></div>';
+    h += '<div class="tablewrap"><table><thead><tr><th class="l stickyc">キャスト</th>' + prods.map(function (p) { return '<th>' + esc(p) + '</th>'; }).join('') + '<th>計</th></tr></thead><tbody>';
+    const colTot = {}; prods.forEach(function (p) { colTot[p] = 0; }); let grand = 0;
+    castNames.forEach(function (c) {
+      let rowTot = 0;
+      const cells = prods.map(function (p) { const v = grid[c][p]; colTot[p] += v; rowTot += v; return '<td>' + (v || '') + '</td>'; }).join('');
+      grand += rowTot;
+      h += '<tr><td class="l stickyc">' + esc(c) + '</td>' + cells + '<td>' + rowTot + '</td></tr>';
+    });
+    h += '<tr class="total"><td class="l stickyc">計</td>' + prods.map(function (p) { return '<td>' + colTot[p] + '</td>'; }).join('') + '<td>' + grand + '</td></tr>';
+    return h + '</tbody></table></div><div class="muted-note">キャスト×商品の完全クロス集計（個数）。列合計は商品別集計と一致（キャストドリンクS ' + D.itemTotals['キャストドリンクS'] + '個 等）。個別配分は実測シェアに基づくデモ値。</div>';
   }
 
   // ---------- キャスト給与（月次サマリ） ----------
@@ -291,9 +324,9 @@
     const cols = ['No','キャスト','属性','勤務','オーダー小計','リクエスト小計','同伴小計','時間報酬',
       'リクエストB','場内B','同伴B','ドリンクB','ボトルB','フードB','ボーナス','厚生費','日払い','マイナス','給率','残り支給額'];
     let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px"><div class="pill">末日締め・2026年8月</div>'
-      + '<div><button class="btn sm" onclick="APP.toast(&#39;Excel出力はデモ対象外&#39;)">Excel</button> '
-      + '<button class="btn sm" onclick="APP.toast(&#39;旧Excelはデモ対象外&#39;)">旧Excel</button> '
-      + '<button class="btn sm gold" onclick="APP.toast(&#39;報酬明細PDFはデモ対象外&#39;)">報酬明細PDF</button></div></div>';
+      + '<div><button class="btn sm" onclick="APP.exportCSV(&#39;export&#39;)">Excel</button> '
+      + '<button class="btn sm" onclick="APP.exportCSV(&#39;export&#39;)">旧Excel</button> '
+      + '<button class="btn sm gold" onclick="APP.printPaySlip(&#39;cast&#39;)">報酬明細PDF</button></div></div>';
     h += '<div class="tablewrap"><table><thead><tr>' + cols.map(function (c, i) { return '<th class="' + (i === 1 ? 'l stickyc' : '') + '">' + c + '</th>'; }).join('') + '</tr></thead><tbody>';
     const dash = '<td class="mut">—</td>';
     rows.forEach(function (r, i) {
@@ -316,35 +349,101 @@
     return h;
   }
   function staffScreen() {
-    let h = '<div class="tablewrap"><table><thead><tr><th class="l">名前</th><th>労働日数</th><th>支給総額</th><th>支給額</th><th>残り支給額</th><th>日払い</th></tr></thead><tbody>';
-    h += '<tr><td class="l">タカシ</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>';
-    h += '<tr><td class="l">ケンジ</td><td>18</td><td>' + num(160000) + '</td><td>' + num(160000) + '</td><td class="neg">' + num(-15000) + '</td><td>' + num(175000) + '</td></tr>';
-    h += '<tr class="total"><td class="l">合計</td><td>18</td><td>' + num(160000) + '</td><td>' + num(160000) + '</td><td class="neg">' + num(-15000) + '</td><td>' + num(175000) + '</td></tr>';
-    h += '</tbody></table></div><div class="muted-note">残り支給額 = 支給額 − 日払い。日払い過多でマイナス（前借り超過）になる。</div>';
+    // No/名前/労働日数/支給総額/支給額/残り支給額/厚生費/日払い/賞与/罰金（本家 /staff）
+    const rows = [
+      { name: D.staff[0].name, days: 0, gross: 0, pay: 0, remain: 0, welfare: 0, daily: 0, bonus: 0, fine: 0 },
+      { name: D.staff[1].name, days: 18, gross: 160000, pay: 160000, remain: -15000, welfare: 0, daily: 175000, bonus: 0, fine: 0 },
+    ];
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="pill">末日締め・2026年8月</div>'
+      + '<div><button class="btn sm" onclick="APP.exportCSV(&#39;staff&#39;)">Excel/CSV</button> <button class="btn sm gold" onclick="APP.printPaySlip(&#39;staff&#39;)">報酬明細PDF</button></div></div>';
+    h += '<div class="tablewrap"><table id="staffPay"><thead><tr><th>No</th><th class="l">名前</th><th>労働日数</th><th>支給総額</th><th>支給額</th><th>厚生費</th><th>残り支給額</th><th>日払い</th><th>賞与</th><th>罰金</th></tr></thead><tbody>';
+    let T = { days: 0, gross: 0, pay: 0, welfare: 0, remain: 0, daily: 0, bonus: 0, fine: 0 };
+    rows.forEach(function (r, i) {
+      Object.keys(T).forEach(function (k) { T[k] += r[k] || 0; });
+      h += '<tr><td>' + (D.staff[i] ? D.staff[i].id : i + 1) + '</td><td class="l">' + esc(r.name) + '</td><td>' + r.days + '</td><td>' + num(r.gross) + '</td><td>' + num(r.pay) + '</td><td>' + num(r.welfare) + '</td>'
+        + '<td class="' + (r.remain < 0 ? 'neg' : '') + '">' + num(r.remain) + '</td><td>' + num(r.daily) + '</td><td>' + num(r.bonus) + '</td><td>' + num(r.fine) + '</td></tr>';
+    });
+    h += '<tr class="total"><td></td><td class="l">合計</td><td>' + T.days + '</td><td>' + num(T.gross) + '</td><td>' + num(T.pay) + '</td><td>' + num(T.welfare) + '</td>'
+      + '<td class="' + (T.remain < 0 ? 'neg' : '') + '">' + num(T.remain) + '</td><td>' + num(T.daily) + '</td><td>' + num(T.bonus) + '</td><td>' + num(T.fine) + '</td></tr>';
+    h += '</tbody></table></div><div class="muted-note">支給額＝支給総額−厚生費(スタッフは対象外0)−罰金。残り支給額＝支給額−日払い（前借り過多でマイナス）。賞与/罰金はスタッフ固有項目。</div>';
     return h;
   }
 
   // ---------- タグ集計 ----------
   function tagsScreen() {
-    let h = '<div class="card"><h3>タグ集計（2026年8月度）— 集客担当別</h3><div class="tablewrap"><table><thead><tr>'
-      + '<th class="l">タグ</th><th>件数</th><th>客数</th><th>伝票小計</th><th>現金</th><th>カード</th><th>販売額</th></tr></thead><tbody>';
-    h += '<tr><td class="l"><span class="dot" style="background:#8b949e"></span> ケンジ</td><td>7</td><td>19</td><td>' + num(127500) + '</td><td>' + num(88700) + '</td><td>' + num(59800) + '</td><td>' + num(148500) + '</td></tr>';
-    h += '<tr class="total"><td class="l">合計</td><td>7</td><td>19</td><td>' + num(127500) + '</td><td>' + num(88700) + '</td><td>' + num(59800) + '</td><td>' + num(148500) + '</td></tr>';
-    h += '</tbody></table></div><div class="muted-note">販売額148,500＝まとめの「タグ対象額」と一致。タグ＝集客担当（1伝票に複数可）。</div></div>';
+    // 集客担当タグごとの集計（観測: ケンジ合計。他タグはデモ配分で全タグ表示）
+    const rows = [
+      { name: D.tags[2].name, color: D.tags[2].color, cnt: 7, guests: 19, sub: 127500, cash: 88700, card: 59800, credit: 0, sales: 148500 },
+      { name: D.tags[0].name, color: D.tags[0].color, cnt: 0, guests: 0, sub: 0, cash: 0, card: 0, credit: 0, sales: 0 },
+      { name: D.tags[1].name, color: D.tags[1].color, cnt: 0, guests: 0, sub: 0, cash: 0, card: 0, credit: 0, sales: 0 },
+    ];
+    let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">'
+      + '<div class="seg"><button class="on">タグ別</button><button onclick="APP.toast(&#39;色別集計（デモ）&#39;)">色別集計</button><button onclick="APP.toast(&#39;日毎集計（デモ）&#39;)">日毎集計</button></div>'
+      + '<div><button class="btn sm" onclick="APP.copyTable()">Copy</button> <button class="btn sm" onclick="APP.exportCSV(&#39;tag&#39;)">CSV</button> <button class="btn sm" onclick="APP.exportCSV(&#39;tag&#39;)">Excel</button></div></div>';
+    h += '<div class="card"><h3>タグ集計（2026年8月度）— 集客担当別</h3><div class="tablewrap"><table><thead><tr>'
+      + '<th class="l">タグ</th><th>件数</th><th>客数</th><th>伝票小計</th><th>現金</th><th>カード</th><th>売掛</th><th>販売額</th></tr></thead><tbody>';
+    const T = { cnt: 0, guests: 0, sub: 0, cash: 0, card: 0, credit: 0, sales: 0 };
+    rows.forEach(function (r) {
+      Object.keys(T).forEach(function (k) { T[k] += r[k]; });
+      h += '<tr><td class="l"><span class="dot" style="background:' + r.color + '"></span> ' + esc(r.name) + '</td>'
+        + '<td>' + r.cnt + '</td><td>' + r.guests + '</td>' + cell(r.sub) + cell(r.cash) + cell(r.card) + cell(r.credit) + '<td>' + num(r.sales) + '</td></tr>';
+    });
+    h += '<tr class="total"><td class="l">合計</td><td>' + T.cnt + '</td><td>' + T.guests + '</td>' + cell(T.sub) + cell(T.cash) + cell(T.card) + cell(T.credit) + '<td>' + num(T.sales) + '</td></tr>';
+    h += '</tbody></table></div><div class="muted-note">販売額 ' + num(T.sales) + ' ＝ まとめの「タグ対象額」と一致。タグ＝集客担当（●＋色）。1伝票に複数タグ→タグごとに計上。色別/日毎/CSV/Copy/Excel出力対応。</div></div>';
     return h;
   }
 
   // ---------- お客様管理 ----------
-  function customers() {
-    let h = '<div class="section-title">顧客ランク（直近3ヶ月の来店回数で自動判定）</div>';
-    const ranks = [['S', 20, '#ff5c5c'], ['A', 10, '#f0a02c'], ['B', 5, '#4a9eff'], ['C', 1, '#3fb950'], ['D', 0, '#6e7b8a']];
-    h += '<div class="row">' + ranks.map(function (r) {
-      return '<div class="card" style="flex:1;text-align:center"><div class="big" style="color:' + r[2] + '">' + r[0] + '</div><div class="mut">' + (r[1] ? r[1] + '回以上' : '0回') + '</div><div class="big" style="font-size:20px">0<span class="unit">人</span></div></div>';
-    }).join("") + '</div>';
-    h += '<div class="section-title">顧客属性マスタ（' + D.customerAttributes.length + '種）</div><div class="card"><div class="row">'
-      + D.customerAttributes.map(function (a) { return '<span class="tag">' + esc(a) + '</span>'; }).join("") + '</div></div>';
-    h += '<div class="muted-note">お客様分析・キープ管理・項目定義・タグ→顧客コピーも本家同等（デモは属性/ランクを表示）。</div>';
-    return h;
+  function customers(sub) {
+    const TABS = [['analysis', 'お客さま分析'], ['list', 'お客さま一覧'], ['keep', 'キープ管理']];
+    const view = sub || 'analysis';
+    let h = '<div class="seg" style="margin-bottom:14px">' + TABS.map(function (tb) { return '<button class="' + (view === tb[0] ? 'on' : '') + '" onclick="APP.goSub(\'customers\',\'' + tb[0] + '\')">' + tb[1] + '</button>'; }).join('') + '</div>';
+    return h + ({ analysis: _cAnalysis, list: _cList, keep: _cKeep }[view] || _cAnalysis)();
+  }
+  function _cAnalysis() {
+    const cs = D.customers, cnt = function (r) { return cs.filter(function (c) { return c.rank === r; }).length; };
+    const ranks = [['S', '#d5493f'], ['A', '#e0a32c'], ['B', '#2f6feb'], ['C', '#1f9d57'], ['D', '#a6a091']];
+    let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<div class="seg"><button class="on">今月</button><button onclick="APP.toast(&#39;期間切替（デモ）&#39;)">先月</button><button onclick="APP.toast(&#39;期間切替（デモ）&#39;)">直近3ヶ月</button></div>'
+      + '<button class="btn sm" onclick="APP.exportCSV(&#39;customer&#39;)">Excel</button></div>';
+    h += '<div class="row" style="margin-bottom:6px">' + ranks.map(function (r) {
+      return '<div class="card" style="flex:1;text-align:center;min-width:110px"><div class="big" style="color:' + r[1] + '">' + r[0] + '</div><div class="big" style="font-size:20px">' + cnt(r[0]) + '<span class="unit">人</span></div></div>';
+    }).join('') + '</div>';
+    h += '<div class="tablewrap"><table><thead><tr><th class="l">お客さま</th><th>ランク</th><th>状態</th><th>キープ</th><th>来店回数</th><th>最終来店</th><th>初回来店</th><th>単価</th><th class="l">担当</th><th class="l">属性</th></tr></thead><tbody>';
+    cs.forEach(function (c) {
+      const hasKeep = D.keeps.some(function (k) { return k.customer === c.name; });
+      h += '<tr><td class="l">' + esc(c.name) + '</td><td>' + c.rank + '</td><td class="mut">' + (c.visits > 0 ? '常連' : '休眠') + '</td>'
+        + '<td>' + (hasKeep ? '有' : '—') + '</td><td>' + c.visits + '</td><td class="mut">' + c.last + '</td><td class="mut">' + c.first + '</td>'
+        + '<td>' + yen(c.avg) + '</td><td class="l">' + esc(c.main || '—') + '</td><td class="l" style="white-space:normal;max-width:200px">'
+        + c.attrs.map(function (a) { return '<span class="tag" style="font-size:11px">' + esc(a) + '</span>'; }).join(' ') + '</td></tr>';
+    });
+    return h + '</tbody></table></div><div class="muted-note">ランクは直近3ヶ月の来店回数で自動判定（S20/A10/B5/C1/D）。名前クリックで顧客詳細（デモ）。</div>';
+  }
+  function _cList() {
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">登録数 ' + D.customers.length + ' / FV 0 (最大200)</div>'
+      + '<div><button class="btn sm gold" onclick="APP.newCustomer()">＋ 新規追加</button> <button class="btn sm" onclick="APP.toast(&#39;自動保存済み&#39;)">一括保存</button> <button class="btn sm" onclick="APP.exportCSV(&#39;customer&#39;)">Excel連携</button></div></div>';
+    h += '<div class="tablewrap"><table><thead><tr><th>☆FV</th><th>番号</th><th class="l">名前</th><th class="l">あだ名</th><th class="l">紹介元</th><th class="l">担当</th><th class="l">属性</th><th class="l">電話番号</th><th>操作</th></tr></thead><tbody>';
+    D.customers.forEach(function (c) {
+      h += '<tr><td>☆</td><td>' + c.no + '</td><td class="l"><input type="text" value="' + esc(c.name) + '" data-save-key="cust:' + c.no + ':name" style="width:110px"></td>'
+        + '<td class="l mut">—</td><td class="l mut">—</td><td class="l">' + esc(c.main || '—') + '</td>'
+        + '<td class="l">' + c.attrs.slice(0, 2).map(function (a) { return '<span class="tag" style="font-size:11px">' + esc(a) + '</span>'; }).join(' ') + '</td>'
+        + '<td class="l"><input type="text" value="' + esc(c.phone || '') + '" data-save-key="cust:' + c.no + ':tel" style="width:120px"></td>'
+        + '<td class="mut" style="font-size:12px">編集/削除</td></tr>';
+    });
+    return h + '</tbody></table></div><div class="muted-note">インライン編集→自動保存。☆でファーストビュー登録（アプリ最初に出る顧客・最大200）。項目（あだ名/紹介元/生年月日/会社名/役職/結婚/電話）は設定＞お客様の項目定義で増減。</div>';
+  }
+  function _cKeep() {
+    const ks = D.keeps;
+    const cards = [['有効キープ', ks.length, '#1f9d57'], ['期限切れ', 0, '#a6a091'], ['期限間近', ks.filter(function (k) { return k.memo.indexOf('間近') >= 0; }).length, '#e0a32c'], ['残量少', ks.filter(function (k) { return k.remain.indexOf('残少') >= 0; }).length, '#d5493f']];
+    let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div class="seg"><button class="on">一覧</button><button onclick="APP.toast(&#39;カレンダー表示（デモ）&#39;)">カレンダー</button><button onclick="APP.toast(&#39;期限リスト（デモ）&#39;)">期限リスト</button></div>'
+      + '<button class="btn sm gold" onclick="APP.toast(&#39;キープ新規登録（デモ）&#39;)">＋ 新規登録</button></div>';
+    h += '<div class="row" style="margin-bottom:6px">' + cards.map(function (c) { return '<div class="card" style="flex:1;text-align:center;min-width:110px"><div class="mut">' + c[0] + '</div><div class="big" style="font-size:22px;color:' + c[2] + '">' + c[1] + '<span class="unit">件</span></div></div>'; }).join('') + '</div>';
+    h += '<div class="tablewrap"><table><thead><tr><th class="l">メニュー名</th><th>価格</th><th>残量</th><th>開始日</th><th>有効期限</th><th class="l">お客さま</th><th class="l">ネームタグ</th><th class="l">メモ</th><th>操作</th></tr></thead><tbody>';
+    ks.forEach(function (k) {
+      h += '<tr><td class="l">' + esc(k.product) + '</td><td>' + yen(k.price) + '</td><td>' + esc(k.remain) + '</td><td class="mut">' + k.start + '</td><td class="mut">' + k.expire + '</td>'
+        + '<td class="l">' + esc(k.customer) + '</td><td class="l mut">' + esc(k.nameTag) + '</td><td class="l mut">' + esc(k.memo || '—') + '</td><td class="mut" style="font-size:12px">編集/消込</td></tr>';
+    });
+    return h + '</tbody></table></div><div class="muted-note">キープ（ボトル取り置き）を管理。有効期限が近いものは自動でアラート。既定の有効期限は設定＞お客様で変更（現在' + D.keepDefaultMonths + 'ヶ月）。</div>';
   }
 
   // ---------- 現金管理（レジ精算） ----------
@@ -528,7 +627,7 @@
       + '<div><label>抽出</label><br><select><option>全て表示</option><option>未精算のみ</option><option>精算済のみ</option></select></div>'
       + '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" style="min-height:auto;width:auto"> 詳細表示</label>'
       + '<button class="btn sm">検索</button><button class="btn sm">月間反映</button>'
-      + '<div style="margin-left:auto"><button class="btn sm gold" onclick="APP.newBill()">＋ 新規伝票</button> <button class="btn sm" onclick="APP.toast(&#39;Excel出力はデモ対象外&#39;)">Excel</button></div>'
+      + '<div style="margin-left:auto"><button class="btn sm gold" onclick="APP.newBill()">＋ 新規伝票</button> <button class="btn sm" onclick="APP.exportCSV(&#39;export&#39;)">Excel</button></div>'
       + '</div><div class="muted-note">日付の絞り込みは最大31日間まで。Excelは表示中の分（25件超は表示件数を変更）。</div></div>';
     // 一覧（本家の列: №/ID/出戻り/営業日/入店/退店/時間/卓/客数/顧客/タグ/指名/サービス料/値引/値増/現金/カード/売掛/合計/状態）
     const cols = ['№', '伝票ID', '出戻り', '入店', '退店', '時間', '卓', '客数', '顧客', 'タグ', '指名', 'サービス料', '値引', '値増', '現金', 'カード', '合計', '状態'];
