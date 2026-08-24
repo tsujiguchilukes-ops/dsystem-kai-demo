@@ -427,7 +427,7 @@
     (function(){ const sp=document.getElementById('splash'); if(!sp) return;
       const kill=function(){ sp.classList.add('done'); };
       sp.addEventListener('click', function(){ sp.style.animation='splashOut .3s ease forwards'; setTimeout(kill,320); });
-      setTimeout(kill, 2600);
+      setTimeout(kill, 4700);
     })();
     buildHelp();
     const r = parseHash();

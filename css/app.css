@@ -191,7 +191,7 @@ th.stickyc{background:var(--bg3);z-index:2}
 /* ===== 起動アニメーション（スプラッシュ）===== */
 .splash{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(120% 120% at 50% 40%, #ffffff 0%, #f6f3ec 55%, #eaf1ec 100%);
-  animation:splashOut .7s ease 1.9s forwards}
+  animation:splashOut .8s ease 3.8s forwards}
 .splash-inner{text-align:center;transform:translateY(6px)}
 .splash-logo{font-family:var(--serif);font-size:44px;font-weight:700;color:var(--green);letter-spacing:2px;
   opacity:0;transform:translateY(14px);animation:splashUp .9s cubic-bezier(.2,.8,.2,1) .15s forwards}
