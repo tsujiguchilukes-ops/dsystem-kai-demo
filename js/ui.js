@@ -3,6 +3,8 @@
   "use strict";
   const D = global.DATA, C = global.CALC;
   let _hideZeroCast = false; // キャスト別商品集計「0個を除外」の状態
+  let _custPeriod = 'm0';    // お客さま分析の期間（m0=今月 / m1=先月 / m3=直近3ヶ月）
+  let _billFilter = null;    // 伝票一覧の絞り込み条件
   const yen = function (n) { if (!Number.isFinite(n)) return "計算エラー"; return "¥" + n.toLocaleString("ja-JP"); };
   const num = function (n) { if (!Number.isFinite(n)) return "計算エラー"; return n.toLocaleString("ja-JP"); };
   const esc = function (s) {
@@ -107,7 +109,9 @@
   }
 
   // ---------- 収支明細（月次） ----------
-  function balance() {
+  function balance(view) {
+    if (view === 'daily') return _balanceDaily();
+
     const rows = D.financeDaily;
     const agg = C.monthAggregate(rows);
     const biz = rows.filter(function (r) { return !r.holiday; });
@@ -116,7 +120,7 @@
       + kpi('売上', yen(agg.salesTotal), '#4a9eff', ser('salesTotal')) + kpi('入金', yen(agg.deposit), '#f0c020', ser('deposit'))
       + kpi('経費', yen(agg.expenseTotal), '#ff5c5c', ser('expenseTotal')) + kpi('粗利', yen(agg.grossProfit), '#3fb950', ser('grossProfit')) + '</div>';
     h += '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">'
-      + '<div class="seg"><button class="on">月次</button><button onclick="APP.toast(\'日次は準備中です\')">日次</button></div>'
+      + '<div class="seg"><button class="on">月次</button><button onclick="APP.goSub(\'balance\',\'daily\')">日次</button></div>'
       + '<div><button class="btn sm" onclick="APP.exportCSV(&#39;balance&#39;)">Excel</button> <button class="btn sm" onclick="APP.exportCSV(&#39;balance&#39;)">Excel(All)</button> <button class="btn sm ghost" onclick="APP.exportCSV(&#39;balance&#39;)">旧Excel</button></div></div>';
     // ヒートマップ（粗利）
     h += '<div class="card" style="margin-bottom:16px"><h3>曜日別 粗利ヒートマップ</h3>' + heatmap(rows) + '</div>';
@@ -178,6 +182,41 @@
       h += '<div class="d" title="' + r.date + ' ' + yen(r.grossProfit) + '" style="background:' + bg + '"><span>' + (+r.date.slice(-2)) + '</span><span style="font-size:9px">' + Math.round(r.grossProfit / 1000) + 'k</span></div>';
     });
     return h + '</div>';
+  }
+
+  // 収支明細（日次）— 月次の日付から掘り下げる
+  function _balanceDaily() {
+    const rows = D.financeDaily.filter(function (r) { return !r.holiday; });
+    let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">'
+      + '<div class="seg"><button onclick="APP.go(\'balance\')">月次</button><button class="on">日次</button></div>'
+      + '<div><button class="btn sm" onclick="APP.copyTable()">Copy</button> '
+      + '<button class="btn sm" onclick="APP.exportCSV(&#39;balance-daily&#39;)">Excel</button></div></div>';
+    h += '<div class="hint">📅 <div>1日ぶんの中身を並べています。<b>売上が立った理由</b>と<b>その日いくら残ったか</b>を、日ごとに追えます。</div></div>';
+    // 日ごとにカードで出す（表より読みやすい）
+    rows.forEach(function (r) {
+      const rate = C.payRate(r);
+      const neg = r.grossProfit < 0;
+      h += '<div class="card" style="margin-bottom:12px' + (neg ? ';background:#fdf1ef;border-color:#f0c8c2' : '') + '">'
+        + '<div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px">'
+        + '<h3 style="margin:0;font-size:15px;color:var(--ink)">' + r.date.slice(5).replace('-', '/') + '（' + r.dow + '）</h3>'
+        + '<span class="pill' + (neg ? ' down' : ' up') + '">粗利 ' + yen(r.grossProfit) + '</span></div>'
+        + '<div class="row" style="gap:10px">'
+        + _dCell('売上計', yen(r.salesTotal), [['現金', yen(r.cash)], ['売掛', yen(r.credit)], ['カード', yen(r.card)]])
+        + _dCell('女子売上', yen(r.reqSub + r.dohanSub), [['リクエスト', yen(r.reqSub)], ['同伴', yen(r.dohanSub)]])
+        + _dCell('人件費', yen(r.remainingPay + r.maleDaily + r.femaleDaily + r.bonus),
+            [['残り支給額', yen(r.remainingPay)], ['男子日払い', yen(r.maleDaily)], ['女子日払い', yen(r.femaleDaily)]])
+        + _dCell('経費計', yen(r.expenseTotal), [['出金', yen(r.withdrawal)], ['マイナス', yen(r.minus)], ['給率', rate.toFixed(2) + '%']])
+        + '</div></div>';
+    });
+    return h + '<div class="muted-note">粗利＝売上計＋入金−経費計。経費計＝残り支給額＋男子日払い＋女子日払い＋ボーナス＋出金。'
+      + '給率＝（残り支給額＋女子日払い）÷売上計。赤字の日は赤く出ます。</div>';
+  }
+  function _dCell(title, big, kvs) {
+    return '<div class="card" style="flex:1;min-width:190px;box-shadow:none;background:var(--bg3)">'
+      + '<h3 style="margin:0 0 6px">' + title + '</h3>'
+      + '<div class="big" style="font-size:19px;margin-bottom:6px">' + big + '</div>'
+      + kvs.map(function (k) { return '<div class="kv"><span class="k">' + k[0] + '</span><span class="v">' + k[1] + '</span></div>'; }).join('')
+      + '</div>';
   }
 
   // ---------- リアルタイム集計（給与エンジン実演） ----------
@@ -341,8 +380,9 @@
     const cols = ['No','キャスト','属性','勤務','オーダー小計','リクエスト小計','同伴小計','時間報酬',
       'リクエストB','場内B','同伴B','ドリンクB','ボトルB','フードB','ボーナス','厚生費','日払い','マイナス','給率','残り支給額'];
     let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px"><div class="pill">末日締め・2026年8月</div>'
-      + '<div><button class="btn sm" onclick="APP.exportCSV(&#39;export&#39;)">Excel</button> '
-      + '<button class="btn sm" onclick="APP.exportCSV(&#39;export&#39;)">旧Excel</button> '
+      + '<div><button class="btn sm" onclick="APP.exportCSV(&#39;cast&#39;)">Excel</button> '
+      + '<button class="btn sm" onclick="APP.exportCSV(&#39;cast&#39;,&#39;all&#39;)">Excel(All)</button> '
+      + '<button class="btn sm" onclick="APP.exportCSV(&#39;cast&#39;,&#39;legacy&#39;)">旧Excel</button> '
       + '<button class="btn sm gold" onclick="APP.printPaySlip(&#39;cast&#39;)">報酬明細PDF</button></div></div>';
     h += '<div class="tablewrap"><table><thead><tr>' + cols.map(function (c, i) { return '<th class="' + (i === 1 ? 'l stickyc' : '') + '">' + c + '</th>'; }).join('') + '</tr></thead><tbody>';
     const dash = '<td class="mut">—</td>';
@@ -387,7 +427,10 @@
   }
 
   // ---------- タグ集計 ----------
-  function tagsScreen() {
+  function tagsScreen(view) {
+    if (view === 'color') return _tagColor();
+    if (view === 'daily') return _tagDaily();
+
     // 集客担当タグごとの集計（観測: ケンジ合計。他タグはデモ配分で全タグ表示）
     const rows = [
       { name: D.tags[2].name, color: D.tags[2].color, cnt: 7, guests: 19, sub: 127500, cash: 88700, card: 59800, credit: 0, sales: 148500 },
@@ -395,7 +438,7 @@
       { name: D.tags[1].name, color: D.tags[1].color, cnt: 0, guests: 0, sub: 0, cash: 0, card: 0, credit: 0, sales: 0 },
     ];
     let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">'
-      + '<div class="seg"><button class="on">タグ別</button><button onclick="APP.toast(&#39;色別集計（デモ）&#39;)">色別集計</button><button onclick="APP.toast(&#39;日毎集計（デモ）&#39;)">日毎集計</button></div>'
+      + '<div class="seg"><button class="on">タグ別</button><button onclick="APP.goSub(&#39;tags&#39;,&#39;color&#39;)">色別集計</button><button onclick="APP.goSub(&#39;tags&#39;,&#39;daily&#39;)">日毎集計</button></div>'
       + '<div><button class="btn sm" onclick="APP.copyTable()">Copy</button> <button class="btn sm" onclick="APP.exportCSV(&#39;tag&#39;)">CSV</button> <button class="btn sm" onclick="APP.exportCSV(&#39;tag&#39;)">Excel</button></div></div>';
     h += '<div class="card"><h3>タグ集計（2026年8月度）— 集客担当別</h3><div class="tablewrap"><table><thead><tr>'
       + '<th class="l">タグ</th><th>件数</th><th>客数</th><th>伝票小計</th><th>現金</th><th>カード</th><th>売掛</th><th>販売額</th></tr></thead><tbody>';
@@ -413,15 +456,17 @@
   // ---------- お客さま管理 ----------
   function customers(sub) {
     const TABS = [['analysis', 'お客さま分析'], ['list', 'お客さま一覧'], ['keep', 'キープ管理']];
-    const view = sub || 'analysis';
+    const parts = String(sub || 'analysis').split('-');
+    const view = parts[0], sub2 = parts[1] || null;
     let h = '<div class="seg" style="margin-bottom:14px">' + TABS.map(function (tb) { return '<button class="' + (view === tb[0] ? 'on' : '') + '" onclick="APP.goSub(\'customers\',\'' + tb[0] + '\')">' + tb[1] + '</button>'; }).join('') + '</div>';
-    return h + ({ analysis: _cAnalysis, list: _cList, keep: _cKeep }[view] || _cAnalysis)();
+    return h + ({ analysis: _cAnalysis, list: _cList, keep: _cKeep }[view] || _cAnalysis)(sub2);
   }
   function _cAnalysis() {
     const cs = D.customers, cnt = function (r) { return cs.filter(function (c) { return c.rank === r; }).length; };
     const ranks = [['S', '#d5493f'], ['A', '#e0a32c'], ['B', '#2f6feb'], ['C', '#1f9d57'], ['D', '#a6a091']];
     let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">'
-      + '<div class="seg"><button class="on">今月</button><button onclick="APP.toast(&#39;期間切替（デモ）&#39;)">先月</button><button onclick="APP.toast(&#39;期間切替（デモ）&#39;)">直近3ヶ月</button></div>'
+      + '<div class="seg">' + [['m0','今月'],['m1','先月'],['m3','直近3ヶ月']].map(function(t){
+          return '<button class="' + (_custPeriod===t[0]?'on':'') + '" onclick="APP.custPeriod(\'' + t[0] + '\')">' + t[1] + '</button>'; }).join('') + '</div>'
       + '<button class="btn sm" onclick="APP.exportCSV(&#39;customer&#39;)">Excel</button></div>';
     h += '<div class="row" style="margin-bottom:6px">' + ranks.map(function (r) {
       return '<div class="card" style="flex:1;text-align:center;min-width:110px"><div class="big" style="color:' + r[1] + '">' + r[0] + '</div><div class="big" style="font-size:20px">' + cnt(r[0]) + '<span class="unit">人</span></div></div>';
@@ -434,7 +479,7 @@
         + '<td>' + yen(c.avg) + '</td><td class="l">' + esc(c.main || '—') + '</td><td class="l" style="white-space:normal;max-width:200px">'
         + c.attrs.map(function (a) { return '<span class="tag" style="font-size:11px">' + esc(a) + '</span>'; }).join(' ') + '</td></tr>';
     });
-    return h + '</tbody></table></div><div class="muted-note">ランクは直近3ヶ月の来店回数で自動判定（S20/A10/B5/C1/D）。名前クリックで顧客詳細（デモ）。</div>';
+    return h + '</tbody></table></div><div class="muted-note">ランクは直近3ヶ月の来店回数で自動判定（S20/A10/B5/C1/D）。名前を押すと、そのお客さまの内訳が出ます。</div>';
   }
   function _cList() {
     let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">登録数 ' + D.customers.length + ' / お気に入り 0 (最大200)</div>'
@@ -449,11 +494,13 @@
     });
     return h + '</tbody></table></div><div class="muted-note">インライン編集→自動保存。☆でお気に入り登録（アプリ最初に出る顧客・最大200）。項目（あだ名/紹介元/生年月日/会社名/役職/結婚/電話）は設定＞お客さまの項目定義で増減。</div>';
   }
-  function _cKeep() {
+  function _cKeep(view) {
+    if (view === 'calendar') return _keepCalendar();
+    if (view === 'expire')   return _keepExpire();
+
     const ks = D.keeps;
     const cards = [['有効キープ', ks.length, '#1f9d57'], ['期限切れ', 0, '#a6a091'], ['期限間近', ks.filter(function (k) { return k.memo.indexOf('間近') >= 0; }).length, '#e0a32c'], ['残量少', ks.filter(function (k) { return k.remain.indexOf('残少') >= 0; }).length, '#d5493f']];
-    let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div class="seg"><button class="on">一覧</button><button onclick="APP.toast(&#39;カレンダー表示（デモ）&#39;)">カレンダー</button><button onclick="APP.toast(&#39;期限リスト（デモ）&#39;)">期限リスト</button></div>'
-      + '<button class="btn sm gold" onclick="APP.toast(&#39;キープ新規登録（デモ）&#39;)">＋ 新規登録</button></div>';
+    let h = _keepTabs('list');
     h += '<div class="row" style="margin-bottom:6px">' + cards.map(function (c) { return '<div class="card" style="flex:1;text-align:center;min-width:110px"><div class="mut">' + c[0] + '</div><div class="big" style="font-size:22px;color:' + c[2] + '">' + c[1] + '<span class="unit">件</span></div></div>'; }).join('') + '</div>';
     h += '<div class="tablewrap"><table><thead><tr><th class="l">メニュー名</th><th>価格</th><th>残量</th><th>開始日</th><th>有効期限</th><th class="l">お客さま</th><th class="l">ネームタグ</th><th class="l">メモ</th><th>操作</th></tr></thead><tbody>';
     ks.forEach(function (k) {
@@ -461,6 +508,132 @@
         + '<td class="l">' + esc(k.customer) + '</td><td class="l mut">' + esc(k.nameTag) + '</td><td class="l mut">' + esc(k.memo || '—') + '</td><td class="mut" style="font-size:12px">編集/消込</td></tr>';
     });
     return h + '</tbody></table></div><div class="muted-note">キープ（ボトル取り置き）を管理。有効期限が近いものは自動でアラート。既定の有効期限は設定＞お客さまで変更（現在' + D.keepDefaultMonths + 'ヶ月）。</div>';
+  }
+
+  // ---- タグ：色別集計 ----
+  function _tagColor() {
+    let h = _tagTabs('color');
+    // 色ごとにまとめる（本家の色別集計）
+    const byColor = {};
+    D.tags.forEach(function (t) {
+      const k = t.color;
+      byColor[k] = byColor[k] || { color: k, names: [], cnt: 0, guests: 0, sales: 0 };
+      byColor[k].names.push(t.name);
+    });
+    // 観測できているのは1タグぶんだけなので、それを持つ色に乗せる
+    const known = { name: D.tags[2].name, cnt: 7, guests: 19, sales: 148500 };
+    const target = byColor[D.tags[2].color];
+    if (target) { target.cnt = known.cnt; target.guests = known.guests; target.sales = known.sales; }
+    const list = Object.keys(byColor).map(function (k) { return byColor[k]; });
+    h += '<div class="card"><h3>色別集計（2026年8月度）</h3><div class="tablewrap"><table><thead><tr>'
+      + '<th class="l">色</th><th class="l">含まれるタグ</th><th>件数</th><th>客数</th><th>販売額</th><th>客単価</th></tr></thead><tbody>';
+    let T = { cnt: 0, guests: 0, sales: 0 };
+    list.forEach(function (r) {
+      T.cnt += r.cnt; T.guests += r.guests; T.sales += r.sales;
+      h += '<tr><td class="l"><span class="dot" style="background:' + esc(r.color) + '"></span> ' + esc(r.color) + '</td>'
+        + '<td class="l">' + r.names.map(esc).join(' / ') + '</td>'
+        + '<td>' + r.cnt + '</td><td>' + r.guests + '</td><td>' + yen(r.sales) + '</td>'
+        + '<td>' + (r.guests ? yen(Math.round(r.sales / r.guests)) : '--') + '</td></tr>';
+    });
+    h += '<tr class="total"><td class="l">合計</td><td></td><td>' + T.cnt + '</td><td>' + T.guests + '</td>'
+      + '<td>' + yen(T.sales) + '</td><td>' + (T.guests ? yen(Math.round(T.sales / T.guests)) : '--') + '</td></tr>';
+    return h + '</tbody></table></div><div class="muted-note">タグは色でグループ分けできます。同じ色のタグをまとめて見るのがこの画面です。</div></div>';
+  }
+  // ---- タグ：日毎集計 ----
+  function _tagDaily() {
+    let h = _tagTabs('daily');
+    const rows = D.financeDaily.filter(function (r) { return !r.holiday && r.salesTotal; });
+    // タグ対象額は月合計148,500が観測値。日別は売上比で割り振る（合計は必ず一致させる）
+    const total = rows.reduce(function (a, r) { return a + r.salesTotal; }, 0);
+    const alloc = distribute(148500, rows.map(function (r) { return r.salesTotal; }));
+    h += '<div class="card"><h3>日毎集計（タグ対象額）</h3><div class="tablewrap"><table><thead><tr>'
+      + '<th class="l">日付</th><th>売上計</th><th>タグ対象額</th><th>占める割合</th></tr></thead><tbody>';
+    rows.forEach(function (r, i) {
+      h += '<tr><td class="l">' + r.date.slice(5).replace('-', '/') + '（' + r.dow + '）</td>'
+        + '<td>' + yen(r.salesTotal) + '</td><td>' + yen(alloc[i]) + '</td>'
+        + '<td>' + (r.salesTotal ? (alloc[i] / r.salesTotal * 100).toFixed(1) : '0.0') + '%</td></tr>';
+    });
+    h += '<tr class="total"><td class="l">合計</td><td>' + yen(total) + '</td><td>' + yen(148500) + '</td>'
+      + '<td>' + (148500 / total * 100).toFixed(1) + '%</td></tr>';
+    return h + '</tbody></table></div><div class="muted-note">合計148,500円は実測値。日別の内訳は売上に比例して配分しています（合計は必ず一致）。</div></div>';
+  }
+  function _tagTabs(on) {
+    const T = [['', 'タグ別'], ['color', '色別集計'], ['daily', '日毎集計']];
+    return '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px"><div class="seg">'
+      + T.map(function (t) {
+          const act = (t[0] === on || (!t[0] && on === 'tag')) ? ' class="on"' : '';
+          const go = t[0] ? "APP.goSub('tags','" + t[0] + "')" : "APP.go('tags')";
+          return '<button' + act + ' onclick="' + go + '">' + t[1] + '</button>';
+        }).join('')
+      + '</div><div><button class="btn sm" onclick="APP.copyTable()">Copy</button> '
+      + '<button class="btn sm" onclick="APP.exportCSV(&#39;tag&#39;)">Excel</button></div></div>';
+  }
+
+  // ---- キープ：タブ ----
+  function _keepTabs(on) {
+    const T = [['', '一覧'], ['calendar', 'カレンダー'], ['expire', '期限リスト']];
+    return '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div class="seg">'
+      + T.map(function (t) {
+          const act = (t[0] === on || (!t[0] && on === 'list')) ? ' class="on"' : '';
+          const go = "APP.goSub('customers','keep" + (t[0] ? '-' + t[0] : '') + "')";
+          return '<button' + act + ' onclick="' + go + '">' + t[1] + '</button>';
+        }).join('')
+      + '</div><button class="btn sm gold" onclick="APP.newKeep()">＋ 新規登録</button></div>';
+  }
+  // ---- キープ：カレンダー（期限の入っている日に印） ----
+  function _keepCalendar() {
+    let h = _keepTabs('calendar');
+    const byDay = {};
+    (D.keeps || []).forEach(function (k) {
+      const d = String(k.expire || '').slice(-2).replace(/^0/, '');
+      if (d) { byDay[d] = byDay[d] || []; byDay[d].push(k); }
+    });
+    const dows = ['日', '月', '火', '水', '木', '金', '土'];
+    h += '<div class="card"><h3>キープの有効期限（2026年8月）</h3>'
+      + '<div class="heat" style="gap:6px">' + dows.map(function (d) {
+          return '<div style="text-align:center;color:var(--muted);font-size:11px">' + d + '</div>'; }).join('');
+    const first = D.financeDaily[0];
+    let pad = dows.indexOf(first.dow);
+    for (let i = 0; i < pad; i++) h += '<div></div>';
+    for (let day = 1; day <= 31; day++) {
+      const ks = byDay[String(day)] || [];
+      const bg = ks.length ? 'var(--gold)' : '#efeadd';
+      const col = ks.length ? '#fff' : 'var(--dim)';
+      h += '<div class="d" style="background:' + bg + ';color:' + col + '" title="'
+        + (ks.length ? ks.map(function (k) { return k.customer + ' / ' + k.product; }).join(' , ') : '期限なし') + '">'
+        + '<span>' + day + '</span>'
+        + (ks.length ? '<span style="font-size:9px">' + ks.length + '件</span>' : '') + '</div>';
+    }
+    h += '</div><div class="muted-note">金色の日に期限が来ます。日にちにカーソルを合わせると、誰の何かが出ます。</div></div>';
+    return h + _keepList();
+  }
+  // ---- キープ：期限リスト（近い順） ----
+  function _keepExpire() {
+    let h = _keepTabs('expire');
+    const today = '2026-08-24';
+    const ks = (D.keeps || []).slice().sort(function (a, b) { return String(a.expire).localeCompare(String(b.expire)); });
+    h += '<div class="card"><h3>期限が近い順</h3><div class="tablewrap"><table><thead><tr>'
+      + '<th>あと</th><th class="l">お客さま</th><th class="l">メニュー名</th><th>残量</th><th>有効期限</th><th>操作</th></tr></thead><tbody>';
+    ks.forEach(function (k) {
+      const days = Math.round((new Date(k.expire) - new Date(today)) / 86400000);
+      const cls = days < 0 ? 'neg' : (days <= 14 ? '' : 'mut');
+      const label = days < 0 ? '期限切れ' : days + '日';
+      h += '<tr' + (days <= 14 ? ' class="neg-row"' : '') + '><td class="' + cls + '"><b>' + label + '</b></td>'
+        + '<td class="l">' + esc(k.customer) + '</td><td class="l">' + esc(k.product) + '</td>'
+        + '<td>' + esc(k.remain) + '</td><td class="mut">' + esc(k.expire) + '</td>'
+        + '<td><button class="btn sm" onclick="APP.keepConsume(\'' + esc(k.product).replace(/'/g, '&#39;') + '\')">消込</button></td></tr>';
+    });
+    return h + '</tbody></table></div><div class="muted-note">残り14日を切ると赤く出ます。お客さまに連絡する目安に。</div></div>';
+  }
+  function _keepList() {
+    let h = '<div class="tablewrap" style="margin-top:12px"><table><thead><tr><th class="l">メニュー名</th><th>価格</th><th>残量</th>'
+      + '<th>開始日</th><th>有効期限</th><th class="l">お客さま</th><th class="l">メモ</th></tr></thead><tbody>';
+    (D.keeps || []).forEach(function (k) {
+      h += '<tr><td class="l">' + esc(k.product) + '</td><td>' + yen(k.price) + '</td><td>' + esc(k.remain) + '</td>'
+        + '<td class="mut">' + esc(k.start) + '</td><td class="mut">' + esc(k.expire) + '</td>'
+        + '<td class="l">' + esc(k.customer) + '</td><td class="l mut">' + esc(k.memo || '—') + '</td></tr>';
+    });
+    return h + '</tbody></table></div>';
   }
 
   // ---------- 現金管理（レジ精算） ----------
@@ -604,7 +777,7 @@
     return h;
   }
   function _sStaff() {
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">スタッフ設定</div><button class="btn sm gold" onclick="APP.toast(&#39;新規作成は準備中です&#39;)">＋ 新規作成</button></div>';
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">スタッフ設定</div><button class="btn sm gold" onclick="APP.newStaff()">＋ 新規作成</button></div>';
     h += '<div class="tablewrap"><table><thead><tr><th>No</th><th class="l">名前</th><th>時給</th><th>日給</th><th>月給</th><th>厚生費率</th><th>登録月</th><th>操作</th></tr></thead><tbody>';
     D.staff.forEach(function (s) {
       h += '<tr><td>' + s.id + '</td><td class="l">' + esc(s.name) + '</td><td class="mut">—</td><td>' + yen(s.daily) + '</td><td class="mut">—</td><td>' + (s.welfare || 0) + '</td><td class="mut">' + s.since + '</td>'
@@ -614,7 +787,7 @@
   }
   function _sCost() {
     const KIND = global.SCHEMA.CostKind; const kmap = {}; Object.keys(KIND).forEach(function (k) { kmap[KIND[k].key] = KIND[k].label; });
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">入出金項目</div><button class="btn sm gold" onclick="APP.toast(&#39;新規登録は準備中です&#39;)">＋ 新規登録</button></div>';
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">入出金項目</div><button class="btn sm gold" onclick="APP.newCostItem()">＋ 新規登録</button></div>';
     h += '<div class="tablewrap"><table><thead><tr><th>ID</th><th class="l">名称</th><th class="l">種別</th><th>粗利算入</th><th>現金算入</th><th>操作</th></tr></thead><tbody>';
     D.costItems.forEach(function (c) {
       const K = Object.keys(KIND).map(function (k) { return KIND[k]; }).find(function (v) { return v.key === c.kind; }) || {};
@@ -624,7 +797,7 @@
     return h + '</tbody></table></div><div class="muted-note">種別ごとに（粗利算入・現金算入）が決まる＝粗利計算・レジ精算への反映を制御（本家の粗利×フラグ）。</div>';
   }
   function _sFee() {
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">給与項目</div><button class="btn sm gold" onclick="APP.toast(&#39;新規作成は準備中です&#39;)">＋ 新規作成</button></div>';
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">給与項目</div><button class="btn sm gold" onclick="APP.newFeeItem()">＋ 新規作成</button></div>';
     const kind = { minus: 'マイナス', bonus: 'ボーナス', dailypay: '日払い' };
     h += '<div class="tablewrap"><table><thead><tr><th>No</th><th class="l">名前</th><th>対象</th><th>種類</th><th>反映方法</th><th>初期値</th><th>操作</th></tr></thead><tbody>';
     D.feeItems.forEach(function (f) {
@@ -722,14 +895,24 @@
       + '<div><label>期間(TO)</label><br><input type="date" value="2026-08-24" data-save-key="bills:to"></div>'
       + '<div><label>抽出</label><br><select><option>全て表示</option><option>未精算のみ</option><option>精算済のみ</option></select></div>'
       + '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" style="min-height:auto;width:auto"> 詳細表示</label>'
-      + '<button class="btn sm" onclick="APP.toast(&#39;絞り込み（デモ）&#39;)">検索</button><button class="btn sm" onclick="APP.toast(&#39;月間へ反映（デモ）&#39;)">月間反映</button>'
-      + '<div style="margin-left:auto"><button class="btn sm gold" onclick="APP.newBill()">＋ 新規伝票</button> <button class="btn sm" onclick="APP.exportCSV(&#39;export&#39;)">Excel</button></div>'
+      + '<button class="btn sm" onclick="APP.billSearch()">検索</button><button class="btn sm" onclick="APP.billToMonth()">月間反映</button>'
+      + '<div style="margin-left:auto"><button class="btn sm gold" onclick="APP.newBill()">＋ 新規伝票</button> <button class="btn sm" onclick="APP.exportCSV(&#39;bills&#39;)">Excel</button> <button class="btn sm" onclick="APP.exportCSV(&#39;bills&#39;,&#39;all&#39;)">Excel(All)</button></div>'
       + '</div><div class="muted-note">日付の絞り込みは最大31日間まで。Excelは表示中の分（25件超は表示件数を変更）。</div></div>';
     // 一覧（本家の列: №/ID/出戻り/営業日/入店/退店/時間/卓/客数/顧客/タグ/指名/サービス料/値引/値増/現金/カード/売掛/合計/状態）
     const cols = ['№', '伝票ID', '出戻り', '入店', '退店', '時間', '卓', '客数', '顧客', 'タグ', '指名', 'サービス料', '値引', '値増', '現金', 'カード', '合計', '状態'];
     h += '<div class="tablewrap"><table><thead><tr>' + cols.map(function (c, i) { return '<th class="' + (i <= 1 ? 'l' : '') + '">' + c + '</th>'; }).join('') + '</tr></thead><tbody>';
     let tS = 0, tSvc = 0, tDisc = 0, tMarkup = 0, tCash = 0, tCard = 0, tTotal = 0, tGuests = 0;
-    D.day0824.bills.forEach(function (b) {
+    // 絞り込み（検索ボタンで設定される）
+    let list = D.day0824.bills;
+    if (_billFilter) {
+      const f = _billFilter;
+      list = list.filter(function (b) {
+        if (f.state === '未精算のみ' && b.settled) return false;
+        if (f.state === '精算済のみ' && !b.settled) return false;
+        return true; // 期間は当日ぶんのみ保持のため、日付での除外はしない
+      });
+    }
+    list.forEach(function (b) {
       const total = (b.cash || 0) + (b.card || 0) + (b.credit || 0);
       const nm = (b.req || []).map(function (x) { return t('本指名') + esc(x.cast) + '(' + x.count + ')'; })
         .concat((b.field || []).map(function (x) { return t('場内指名') + esc(x.cast) + '(' + x.count + ')'; }))
@@ -752,6 +935,9 @@
   global.UI = {
     yen: yen, num: num,
     setHideZeroCast: function (v) { _hideZeroCast = !!v; },
+    setCustPeriod: function (v) { _custPeriod = v; },
+    setBillFilter: function (v) { _billFilter = v; },
+    getBillFilter: function () { return _billFilter; },
     screens: {
       summary: { title: 'まとめ', render: summary },
       balance: { title: '収支', render: balance },

@@ -105,6 +105,152 @@
     persistCasts(); pushAudit('キャスト削除', name, 'あり', 'なし');
     toast(name + ' を削除しました'); render(currentId, currentSub);
   }
+  // ---- 汎用の「新規登録」モーダル。項目を渡すだけで作れる ----
+  function simpleForm(title, fields, onSave, okLabel) {
+    const body = '<div class="row" style="gap:12px">' + fields.map(function (f) {
+      const id = 'sf_' + f.key;
+      let input;
+      if (f.type === 'select') {
+        input = '<select id="' + id + '" style="width:100%">' + f.options.map(function (o) {
+          return '<option value="' + esc(o[0]) + '"' + (o[0] === f.value ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+        }).join('') + '</select>';
+      } else {
+        input = '<input id="' + id + '" type="' + (f.type || 'text') + '"'
+          + (f.type === 'number' ? ' min="0"' : '') + ' value="' + esc(f.value == null ? '' : f.value) + '"'
+          + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + ' style="width:100%">';
+      }
+      return '<div style="flex:1;min-width:' + (f.wide ? '100%' : '150px') + '"><label>' + esc(f.label) + '</label><br>' + input + '</div>';
+    }).join('') + '</div>' + '<div class="muted-note">登録するとその場で一覧に入り、保存されます。</div>';
+    modal(title, body, function () {
+      const v = {};
+      fields.forEach(function (f) { v[f.key] = document.getElementById('sf_' + f.key).value.trim(); });
+      if (onSave(v) !== false) { closeModal(); render(currentId, currentSub); }
+    }, okLabel || '登録する');
+  }
+  function persistList(key, arr) { const st = loadStore(); st[key] = arr; saveStore(st); }
+
+  // キープの新規登録／消込
+  function newKeep() {
+    const prods = DATA.products.filter(function (p) { return p.price > 0; });
+    const custs = DATA.customers || [];
+    simpleForm('キープを登録', [
+      { key: 'product', label: 'メニュー名', type: 'select', options: prods.map(function (p) { return [p.name, p.name]; }) },
+      { key: 'customer', label: 'お客さま', type: 'select', options: custs.map(function (c) { return [c.name, c.name]; }) },
+      { key: 'start', label: '開始日', value: '2026-08-24', type: 'date' },
+      { key: 'months', label: '有効期限（ヶ月）', value: DATA.keepDefaultMonths || 6, type: 'number' },
+      { key: 'memo', label: 'メモ', wide: true, placeholder: '任意' },
+    ], function (v) {
+      if (!v.product || !v.customer) { toast('メニューとお客さまを選んでください'); return false; }
+      const m = Number(v.months) || 6;
+      const d = new Date(v.start); if (isNaN(d.getTime())) { toast('開始日を入れてください'); return false; }
+      d.setMonth(d.getMonth() + m);
+      const exp = d.toISOString().slice(0, 10);
+      const pr = DATA.products.find(function (p) { return p.name === v.product; }) || { price: 0 };
+      DATA.keeps.push({ product: v.product, price: pr.price, remain: '満量', start: v.start, expire: exp,
+                        customer: v.customer, nameTag: v.customer, memo: v.memo || '' });
+      persistList('keeps', DATA.keeps);
+      pushAudit('キープ登録', v.customer + ' / ' + v.product, '(なし)', '期限 ' + exp);
+      toast('キープを登録しました（期限 ' + exp + '）');
+    });
+  }
+  function keepConsume(product) {
+    const k = (DATA.keeps || []).find(function (x) { return x.product === product; });
+    if (!k) { toast('見つかりませんでした'); return; }
+    if (!confirm(k.customer + ' の「' + k.product + '」を消込します。よろしいですか？')) return;
+    DATA.keeps = DATA.keeps.filter(function (x) { return x !== k; });
+    persistList('keeps', DATA.keeps);
+    pushAudit('キープ消込', k.customer + ' / ' + k.product, '有効', '消込済');
+    toast('消込しました'); render(currentId, currentSub);
+  }
+  // スタッフの新規登録
+  function newStaff() {
+    simpleForm('スタッフを追加', [
+      { key: 'name', label: '名前' },
+      { key: 'daily', label: '日給', value: 10000, type: 'number' },
+      { key: 'welfare', label: '厚生費%', value: 0, type: 'number' },
+    ], function (v) {
+      if (!v.name) { toast('名前を入れてください'); return false; }
+      if (DATA.staff.some(function (s) { return s.name === v.name; })) { toast('同じ名前がすでにあります'); return false; }
+      const id = Math.max.apply(null, DATA.staff.map(function (s) { return s.id; }).concat([0])) + 1;
+      DATA.staff.push({ id: id, name: v.name, daily: Number(v.daily) || 0, welfare: Number(v.welfare) || 0, since: '2026-08' });
+      persistList('staff', DATA.staff);
+      pushAudit('スタッフ追加', v.name, '(なし)', '日給' + v.daily);
+      toast(v.name + ' を追加しました');
+    });
+  }
+  // 入出金項目の新規登録
+  function newCostItem() {
+    const kinds = Object.keys(SCHEMA.CostKind).map(function (k) {
+      return [SCHEMA.CostKind[k].key, SCHEMA.CostKind[k].label];
+    });
+    simpleForm('入出金項目を追加', [
+      { key: 'name', label: '項目名' },
+      { key: 'kind', label: '種別', type: 'select', options: kinds, value: 'out_cash_gross', wide: true },
+    ], function (v) {
+      if (!v.name) { toast('項目名を入れてください'); return false; }
+      const id = Math.max.apply(null, DATA.costItems.map(function (x) { return x.id; }).concat([10000])) + 1;
+      DATA.costItems.push({ id: id, name: v.name, kind: v.kind });
+      persistList('costItems', DATA.costItems);
+      pushAudit('入出金項目 追加', v.name, '(なし)', v.kind);
+      toast(v.name + ' を追加しました');
+    });
+  }
+  // 給与項目の新規登録
+  function newFeeItem() {
+    simpleForm('給与項目を追加', [
+      { key: 'name', label: '項目名' },
+      { key: 'target', label: '対象', type: 'select', value: 'common',
+        options: [['common', '共通'], ['cast', 'キャスト'], ['staff', 'スタッフ']] },
+      { key: 'kind', label: '種類', type: 'select', value: 'minus',
+        options: [['minus', 'マイナス'], ['bonus', 'ボーナス'], ['dailyPay', '日払い']] },
+    ], function (v) {
+      if (!v.name) { toast('項目名を入れてください'); return false; }
+      const no = Math.max.apply(null, DATA.feeItems.map(function (x) { return x.no; }).concat([0])) + 1;
+      DATA.feeItems.push({ no: no, name: v.name, target: v.target, kind: v.kind });
+      persistList('feeItems', DATA.feeItems);
+      pushAudit('給与項目 追加', v.name, '(なし)', v.target + '/' + v.kind);
+      toast(v.name + ' を追加しました');
+    });
+  }
+  // 伝票の絞り込み（期間・精算状態）
+  function billSearch() {
+    const g = function (k) { const el = document.querySelector('[data-save-key="bills:' + k + '"]'); return el ? el.value : ''; };
+    const sel = document.querySelector('#content select');
+    const from = g('from'), to = g('to');
+    const state = sel ? sel.value : '全て表示';
+    if (from && to && from > to) { toast('期間のFROMとTOが逆です'); return; }
+    // 最大31日（本家と同じ制限）
+    if (from && to) {
+      const d = (new Date(to) - new Date(from)) / 86400000;
+      if (d > 31) { toast('期間は最大31日までです'); return; }
+    }
+    UI.setBillFilter({ from: from, to: to, state: state });
+    render('bills');
+    const n = document.querySelectorAll('#content tbody tr').length - 1;
+    toast('絞り込みました（' + Math.max(0, n) + '件）');
+  }
+  // 伝票を月間集計へ反映（当日の伝票から収支の行を作り直す）
+  function billToMonth() {
+    const bills = DATA.day0824.bills || [];
+    const A = CALC.todayAggregate(bills, DATA.day0824.attendance);
+    const row = DATA.financeDaily.find(function (r) { return r.date === '2026-08-24'; });
+    if (!row) { toast('反映先の日が見つかりません'); return; }
+    const before = row.salesTotal;
+    if (!confirm('8/24 の伝票 ' + bills.length + '枚を、月間の収支に反映します。\n'
+      + '売上計 ' + before.toLocaleString('ja-JP') + '円 → ' + A.settled.sales.toLocaleString('ja-JP') + '円（精算済ベース）\nよろしいですか？')) {
+      toast('反映を取りやめました'); return;
+    }
+    row.cash = A.settled.cash; row.card = A.settled.card; row.credit = A.settled.credit;
+    row.salesTotal = A.settled.sales;
+    row.expenseTotal = row.remainingPay + row.maleDaily + row.femaleDaily + row.bonus + row.withdrawal;
+    row.grossProfit = row.salesTotal + row.deposit - row.expenseTotal;
+    row.payRate = CALC.payRate(row);
+    const st = loadStore(); st.financeDaily = DATA.financeDaily; saveStore(st);
+    pushAudit('月間へ反映', '2026-08-24', before.toLocaleString('ja-JP') + '円', row.salesTotal.toLocaleString('ja-JP') + '円');
+    toast('月間に反映しました'); render('bills');
+  }
+  // お客さま分析の期間切替
+  function custPeriod(v) { UI.setCustPeriod(v); render('customers', 'analysis'); }
   function persistData() { const st = loadStore(); st.bills = DATA.day0824.bills; st.customers = DATA.customers; saveStore(st); }
   function markSaved() {
     const p = document.getElementById('ymPill');
@@ -458,11 +604,54 @@
       }).join(',');
     }).join('\r\n');
   }
-  function exportCSV(kind) {
+  // Excel出力は3系統（本家と同じ）
+  //   normal … 今の画面に出ている表
+  //   all    … その画面の元データを全件（絞り込みを外した状態）
+  //   legacy … 旧形式（1行1レコード・見出しを英字キーに）
+  function exportCSV(kind, mode) {
+    mode = mode || 'normal';
+    if (mode === 'all') return exportAll(kind);
+    if (mode === 'legacy') return exportLegacy(kind);
     const tables = document.querySelectorAll('#content table');
     if (!tables.length) { toast('出力できる表がありません'); return; }
     const csv = Array.prototype.map.call(tables, tableToCsv).join('\r\n\r\n');
-    csvDownload((kind || 'export') + '_2026-08.csv', csv); toast('CSVを書き出しました（Excelで開けます）');
+    csvDownload((kind || 'export') + '_2026-08.csv', csv);
+    toast('Excelに書き出しました（表示中の分）');
+  }
+  // 全件（画面の絞り込みを無視して元データから出す）
+  function exportAll(kind) {
+    const rows = [];
+    if (currentId === 'bills') {
+      rows.push(['№', '伝票ID', '入店', '退店', '卓', '客数', 'タグ', '現金', 'カード', '売掛', '合計', '状態']);
+      DATA.day0824.bills.forEach(function (b) {
+        rows.push([b.no, b.uuid, b.in, b.out, b.table, b.guests, b.tag || '', b.cash || 0, b.card || 0,
+                   b.credit || 0, CALC.billTotal(b), b.settled ? '精算済' : '未精算']);
+      });
+    } else {
+      rows.push(SCHEMA.financeFields);
+      DATA.financeDaily.forEach(function (r) {
+        rows.push(SCHEMA.financeFields.map(function (k) { return r[k]; }));
+      });
+    }
+    csvDownload((kind || 'export') + '_all_2026-08.csv', rows.map(csvRow).join('\r\n'));
+    toast('Excel(All)に書き出しました（' + (rows.length - 1) + '件）');
+  }
+  // 旧形式（見出しを英字キーにした1行1レコード。古い会計ソフトに取り込む用）
+  function exportLegacy(kind) {
+    const rows = [SCHEMA.financeFields];
+    DATA.financeDaily.forEach(function (r) {
+      rows.push(SCHEMA.financeFields.map(function (k) {
+        const v = r[k]; return typeof v === 'boolean' ? (v ? 1 : 0) : v;
+      }));
+    });
+    csvDownload((kind || 'export') + '_legacy_2026-08.csv', rows.map(csvRow).join('\r\n'));
+    toast('旧Excel形式で書き出しました');
+  }
+  function csvRow(a) {
+    return a.map(function (v) {
+      const s = String(v == null ? '' : v);
+      return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',');
   }
   function newCustomer() {
     const castOpts = '<option value="">なし</option>' + DATA.casts.map(function (c) { return '<option>' + esc(c.name) + '</option>'; }).join('');
@@ -634,6 +823,11 @@
       if (Array.isArray(store.bills)) DATA.day0824.bills = store.bills;
       if (Array.isArray(store.customers)) DATA.customers = store.customers;
       if (Array.isArray(store.casts) && store.casts.length) DATA.casts = store.casts;
+      if (Array.isArray(store.staff) && store.staff.length) DATA.staff = store.staff;
+      if (Array.isArray(store.keeps)) DATA.keeps = store.keeps;
+      if (Array.isArray(store.costItems) && store.costItems.length) DATA.costItems = store.costItems;
+      if (Array.isArray(store.feeItems) && store.feeItems.length) DATA.feeItems = store.feeItems;
+      if (Array.isArray(store.financeDaily) && store.financeDaily.length === DATA.financeDaily.length) DATA.financeDaily = store.financeDaily;
       // お客さま一覧のインライン編集（名前/電話）をDATAへ反映＝分析・キープ画面でも一致
       Object.keys(inp).forEach(function (k) { if (k.indexOf('cust:') === 0 && inp[k] != null) applyCustInput(k, inp[k]); });
     } catch (e) {}
@@ -843,7 +1037,9 @@
     }, btn);
   }
   global.APP = { go: go, goSub: goSub, toast: toast, backupExport: backupExport, backupImport: backupImport, voiceCommand: voiceCommand, voiceField: voiceField,
-    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable, cashClose: cashClose, cashRecalc: recalcCash, newCast: newCast, deleteCast: deleteCast,
+    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable, cashClose: cashClose, cashRecalc: recalcCash, newCast: newCast, deleteCast: deleteCast, newKeep: newKeep, keepConsume: keepConsume,
+    newStaff: newStaff, newCostItem: newCostItem, newFeeItem: newFeeItem,
+    billSearch: billSearch, billToMonth: billToMonth, custPeriod: custPeriod,
     toggleCastZero: function (v) { UI.setHideZeroCast(v); render('castItems'); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

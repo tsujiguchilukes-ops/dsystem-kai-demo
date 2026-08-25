@@ -22,6 +22,19 @@ const CASES = [
   { screen: 'history',    run: `return document.querySelectorAll('#content table').length > 0;`,         name: '履歴が出る' },
   { screen: 'items/daily',run: `return document.querySelectorAll('#content table').length > 0;`,         name: '商品日別が出る' },
   { screen: 'tags',       run: `return document.querySelectorAll('#content table').length > 0;`,         name: 'タグ集計が出る' },
+  { screen: 'balance/daily',  run: `return document.querySelectorAll('#content .card').length > 5;`,       name: '収支の日次が出る' },
+  { screen: 'tags/color',     run: `return document.querySelectorAll('#content table').length > 0;`,       name: 'タグ色別が出る' },
+  { screen: 'tags/daily',     run: `return document.querySelectorAll('#content table').length > 0;`,       name: 'タグ日毎が出る' },
+  { screen: 'customers/keep-calendar', run: `return document.querySelectorAll('#content .heat .d').length===31;`, name: 'キープのカレンダー' },
+  { screen: 'customers/keep-expire',   run: `return document.querySelectorAll('#content tbody tr').length>0;`,   name: 'キープの期限リスト' },
+  { screen: 'customers/keep', run: `APP.newKeep(); return !!document.getElementById('sf_product');`,       name: 'キープ新規登録が開く' },
+  { screen: 'settings/staff', run: `APP.newStaff(); return !!document.getElementById('sf_name');`,         name: 'スタッフ追加が開く' },
+  { screen: 'settings/cost',  run: `APP.newCostItem(); return !!document.getElementById('sf_kind');`,      name: '入出金項目の追加が開く' },
+  { screen: 'settings/fee',   run: `APP.newFeeItem(); return !!document.getElementById('sf_target');`,     name: '給与項目の追加が開く' },
+  { screen: 'settings/cast',  run: `APP.newCast(); return !!document.getElementById('ncName');`,           name: 'キャスト追加が開く' },
+  { screen: 'bills',          run: `APP.billSearch(); return true;`,                                       name: '伝票の検索が動く' },
+  { screen: 'balance',        run: `APP.exportCSV('balance','all'); APP.exportCSV('balance','legacy'); return true;`, name: 'Excel(All)/旧Excel' },
+  { screen: 'customers/analysis', run: `APP.custPeriod('m1'); APP.custPeriod('m0'); return true;`,         name: 'お客さまの期間切替' },
 ];
 
 (async () => {
