@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dシステム改 — 夜の店の、数字のための道具</title>
+<meta name="description" content="売上・給与・伝票を、声で。現場のスタッフがそのまま使える店舗管理システム。">
+<meta property="og:title" content="Dシステム改">
+<meta property="og:description" content="夜の店の、数字のための道具。">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+/* ─────────────────────────────────────────────
+   Pinterest から引いた作法（出典は最下部に明記）
+   ・巨大なセリフのワードマーク＋広い余白でヒーローを組む … pin/534543903532416057
+   ・章を 01 / 02 の番号で立てる。番号は細く大きく … pin/533294361818541203, pin/181692166212727538
+   ・深い地色のポスター的セクションを1枚挟んで緩急 … pin/181692166212785124
+   ・アクセント色は1つだけ。面積を絞って効かせる … pin/181692166212724656
+   ・端末の実画面 + 数字の実績で信頼を作る … pin/181692166212818721
+   ・カードは角丸を大きく、影は薄く、境界は線1本 … pin/565342559474451207
+   ───────────────────────────────────────────── */
+:root{
+  --bg:#f6f3ec; --paper:#fffdf8; --ink:#191c18; --muted:#6f6a61; --dim:#a29b8d;
+  --green:#17663f; --green-d:#0e4a2c; --green-soft:#e8f1ea; --gold:#b28c34; --gold-l:#d9b45c;
+  --line:#e2dbcc;
+  --serif:"Hiragino Mincho ProN","Yu Mincho",Georgia,"Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  --num:"SF Pro Display","Helvetica Neue",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.8;
+  font-size:16px;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{max-width:100%;display:block}
+.wrap{width:min(1120px,92vw);margin:0 auto}
+
+/* ── 出てくる動き（scrollでふわっと。派手にしない） ── */
+.rv{opacity:0;transform:translateY(26px);transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1)}
+.rv.in{opacity:1;transform:none}
+.rv.d1{transition-delay:.08s}.rv.d2{transition-delay:.16s}.rv.d3{transition-delay:.24s}.rv.d4{transition-delay:.32s}
+@media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;transition:none}}
+
+/* ── ヘッダー ── */
+header{position:fixed;top:0;left:0;right:0;z-index:50;padding:18px 0;
+  background:rgba(246,243,236,0);backdrop-filter:blur(0px);transition:background .4s,backdrop-filter .4s,padding .4s}
+header.on{background:rgba(246,243,236,.86);backdrop-filter:blur(12px);padding:11px 0;border-bottom:1px solid var(--line)}
+header.dk .mark{color:#f2f7f3}
+header.dk .mark b{color:var(--gold-l)}
+header.dk nav{color:#b9d0c2}
+header.dk nav a:hover{color:#fff}
+header.dk.on{background:rgba(14,74,44,.72);border-bottom-color:rgba(255,255,255,.12)}
+header .wrap{display:flex;align-items:center;gap:18px}
+.mark{font-family:var(--serif);font-size:21px;font-weight:700;color:var(--green);letter-spacing:.5px}
+.mark b{color:var(--gold)}
+header nav{margin-left:auto;display:flex;gap:26px;font-size:13.5px;color:var(--muted)}
+header nav a{color:inherit;text-decoration:none;transition:color .2s}
+header nav a:hover{color:var(--green)}
+@media(max-width:760px){header nav{display:none}}
+
+/* ── ヒーロー ── */
+.hero{min-height:100svh;display:flex;align-items:center;position:relative;padding:120px 0 80px;overflow:hidden}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.85}
+.hero .wrap{position:relative;z-index:2}
+.eyebrow{font-size:11.5px;letter-spacing:.34em;color:var(--gold);font-weight:700;margin-bottom:26px}
+.hero h1{font-family:var(--serif);font-weight:700;line-height:1.24;letter-spacing:-.01em;
+  font-size:clamp(34px,6.4vw,74px);max-width:15em}
+.hero h1 em{font-style:normal;color:var(--green);position:relative;white-space:nowrap}
+.hero h1 em::after{content:"";position:absolute;left:0;right:0;bottom:-.04em;height:.075em;
+  background:linear-gradient(90deg,var(--gold-l),var(--gold));transform:scaleX(0);transform-origin:left;
+  animation:ul 1.1s cubic-bezier(.2,.8,.2,1) 1.0s forwards;border-radius:2px}
+@keyframes ul{to{transform:scaleX(1)}}
+.hero p.lead{margin-top:30px;font-size:clamp(15px,1.7vw,18px);color:#3a3f38;max-width:34em;line-height:2}
+.hero .cta{margin-top:44px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:10px;min-height:56px;padding:0 30px;border-radius:999px;
+  font-size:15px;font-weight:700;text-decoration:none;transition:transform .18s,box-shadow .28s,background .2s}
+.btn.p{background:var(--green);color:#fff;box-shadow:0 10px 30px rgba(23,102,63,.24)}
+.btn.p:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(23,102,63,.3);background:#125835}
+.btn.s{color:var(--ink);border:1.5px solid var(--line);background:var(--paper)}
+.btn.s:hover{transform:translateY(-2px);border-color:var(--green);color:var(--green)}
+.scrollhint{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);z-index:2;
+  font-size:11px;letter-spacing:.2em;color:var(--dim);display:flex;flex-direction:column;align-items:center;gap:9px}
+.scrollhint i{width:1px;height:42px;background:linear-gradient(var(--dim),transparent);animation:drop 2s ease-in-out infinite}
+@keyframes drop{0%,100%{opacity:.25;transform:scaleY(.6)}50%{opacity:1;transform:scaleY(1)}}
+@media(max-width:760px){.scrollhint{display:none}}
+
+/* ── セクション共通 ── */
+section{padding:clamp(80px,11vw,140px) 0}
+.no{font-family:var(--num);font-size:13px;letter-spacing:.2em;color:var(--gold);font-weight:700;margin-bottom:16px}
+h2{font-family:var(--serif);font-weight:700;line-height:1.34;letter-spacing:-.005em;
+  font-size:clamp(26px,3.7vw,42px);margin-bottom:22px}
+.sub{color:var(--muted);font-size:clamp(14.5px,1.5vw,16.5px);max-width:38em;line-height:2}
+
+/* ── 課題（3つ） ── */
+.pains{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:20px;margin-top:52px}
+.pain{background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:30px 26px 28px;
+  transition:transform .35s,box-shadow .35s}
+.pain:hover{transform:translateY(-5px);box-shadow:0 18px 44px rgba(40,33,18,.09)}
+.pain .q{font-family:var(--serif);font-size:34px;color:var(--gold);line-height:1;margin-bottom:14px;opacity:.5}
+.pain h3{font-size:17px;font-weight:700;margin-bottom:10px;line-height:1.6}
+.pain p{font-size:14px;color:var(--muted);line-height:1.95}
+
+/* ── 深緑のポスター面 ── */
+.dark{background:var(--green-d);color:#eef4ef;position:relative;overflow:hidden}
+.dark::before{content:"";position:absolute;inset:0;
+  background:radial-gradient(1000px 500px at 78% 8%,rgba(217,180,92,.16),transparent 62%)}
+.dark .wrap{position:relative;z-index:1}
+.dark .no{color:var(--gold-l)}
+.dark h2{color:#fff}
+.dark .sub{color:#bdd2c5}
+.voice{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(34px,5vw,68px);align-items:center;margin-top:56px}
+@media(max-width:860px){.voice{grid-template-columns:1fr}}
+.says{display:flex;flex-direction:column;gap:13px}
+.say{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.13);border-radius:16px;
+  padding:16px 20px;font-size:15.5px;display:flex;align-items:center;gap:14px;
+  transition:background .3s,border-color .3s,transform .3s}
+.say:hover{background:rgba(255,255,255,.1);border-color:rgba(217,180,92,.5);transform:translateX(5px)}
+.say .w{width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:rgba(217,180,92,.2);
+  display:flex;align-items:center;justify-content:center}
+.say .w svg{width:13px;height:13px;stroke:var(--gold-l);fill:none;stroke-width:2;stroke-linecap:round}
+.mic{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:20px}
+.micwrap{width:clamp(192px,27vw,269px);aspect-ratio:1;display:grid;place-items:center;position:relative}
+.micwrap::after,.micwrap::before{content:"";position:absolute;width:clamp(120px,17vw,168px);aspect-ratio:1;
+  border-radius:50%;border:1px solid rgba(217,180,92,.42);animation:ring 3s ease-out infinite}
+.micwrap::after{animation-delay:1.5s}
+@keyframes ring{0%{transform:scale(1);opacity:.85}100%{transform:scale(1.6);opacity:0}}
+.micdot{width:clamp(120px,17vw,168px);aspect-ratio:1;border-radius:50%;position:relative;
+  background:linear-gradient(150deg,#1f7a4d,#0b3f25);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 26px 60px rgba(0,0,0,.34)}
+.micdot svg{width:38%;height:38%;stroke:#f0e6cf;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.mic .cap{font-size:13px;color:#a8c4b3;letter-spacing:.06em;text-align:center}
+
+/* ── 機能 ── */
+.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;margin-top:52px}
+.feat{background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:28px 25px;
+  transition:transform .35s,box-shadow .35s,border-color .35s}
+.feat:hover{transform:translateY(-5px);box-shadow:0 18px 44px rgba(40,33,18,.09);border-color:#d3c9b4}
+.feat .ic{width:44px;height:44px;border-radius:13px;background:var(--green-soft);
+  display:flex;align-items:center;justify-content:center;margin-bottom:17px}
+.feat .ic svg{width:21px;height:21px;stroke:var(--green);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.feat h3{font-size:16.5px;font-weight:700;margin-bottom:9px}
+.feat p{font-size:14px;color:var(--muted);line-height:1.95}
+
+/* ── 数字 ── */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:22px;margin-top:54px}
+.stat{text-align:center;padding:30px 16px;background:var(--paper);border:1px solid var(--line);border-radius:20px}
+.stat .n{font-family:var(--num);font-size:clamp(34px,4.6vw,50px);font-weight:600;letter-spacing:-.03em;
+  color:var(--green);line-height:1;font-variant-numeric:tabular-nums}
+.stat .n small{font-size:.44em;color:var(--gold);margin-left:3px;font-weight:700}
+.stat .l{font-size:13px;color:var(--muted);margin-top:12px;line-height:1.7}
+
+/* ── 画面 ── */
+.shot{margin-top:56px;border-radius:22px;overflow:hidden;border:1px solid var(--line);
+  box-shadow:0 30px 70px rgba(40,33,18,.14);background:var(--paper)}
+.shot img{width:100%}
+.shotcap{font-size:12.5px;color:var(--dim);text-align:center;margin-top:16px}
+
+/* ── 導入の流れ ── */
+.steps{margin-top:54px;display:grid;gap:2px;background:var(--line);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.step{background:var(--paper);padding:26px 28px;display:grid;grid-template-columns:60px 1fr;gap:20px;align-items:start;
+  transition:background .3s}
+.step:hover{background:#fff}
+.step .n{font-family:var(--num);font-size:26px;font-weight:600;color:var(--gold);line-height:1.1;letter-spacing:-.02em}
+.step h3{font-size:16.5px;font-weight:700;margin-bottom:6px}
+.step p{font-size:14px;color:var(--muted);line-height:1.9}
+@media(max-width:560px){.step{grid-template-columns:44px 1fr;gap:14px;padding:22px 20px}}
+
+/* ── 締め ── */
+.end{background:var(--green-d);color:#fff;text-align:center;position:relative;overflow:hidden}
+.end::before{content:"";position:absolute;inset:0;
+  background:radial-gradient(760px 420px at 50% 0%,rgba(217,180,92,.2),transparent 66%)}
+.end .wrap{position:relative;z-index:1}
+.end h2{color:#fff;margin-bottom:20px}
+.end p{color:#c3d7c9;max-width:30em;margin:0 auto 40px;font-size:16px;line-height:2}
+.end .btn.p{background:var(--gold);color:#241c07;box-shadow:0 12px 34px rgba(217,180,92,.3)}
+.end .btn.p:hover{background:var(--gold-l)}
+.end .btn.s{background:transparent;color:#fff;border-color:rgba(255,255,255,.32)}
+.end .btn.s:hover{border-color:#fff;color:#fff}
+.endcta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+/* ── フッター ── */
+footer{padding:52px 0 62px;font-size:12.5px;color:var(--dim);border-top:1px solid var(--line)}
+footer .wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+footer .src{margin-left:auto;max-width:44em;line-height:1.95;text-align:right}
+footer a{color:var(--muted);text-decoration:none;border-bottom:1px solid var(--line)}
+@media(max-width:760px){footer .src{margin-left:0;text-align:left}}
+</style>
+</head>
+<body>
+
+<header id="hd">
+  <div class="wrap">
+    <div class="mark">Dsystem <b>改</b></div>
+    <nav>
+      <a href="#pain">こんな店へ</a>
+      <a href="#voice">声で入力</a>
+      <a href="#feat">できること</a>
+      <a href="#flow">導入の流れ</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ヒーロー: 巨大なセリフ＋広い余白（pin/534543903532416057 の作法） -->
+<div class="hero">
+  <canvas id="hc"></canvas>
+  <div class="wrap">
+    <div class="eyebrow rv in">FOR NIGHT LOUNGE</div>
+    <h1 class="rv in d1">夜の店の数字を、<br><em>声だけ</em>で動かす。</h1>
+    <p class="lead rv in d2">売上も、給与も、伝票も。<br>
+      パソコンが苦手なスタッフが、そのまま今日から使えます。<br>
+      数字は、今お使いのシステムと1円まで同じ。</p>
+    <div class="cta rv in d3">
+      <a class="btn p" href="#flow">導入の流れを見る
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a>
+      <a class="btn s" href="#feat">できることを見る</a>
+    </div>
+  </div>
+  <div class="scrollhint"><span>SCROLL</span><i></i></div>
+</div>
+
+<!-- 01 課題（番号で章立て: pin/533294361818541203） -->
+<section id="pain">
+  <div class="wrap">
+    <div class="no rv">01 — こんな店へ</div>
+    <h2 class="rv d1">「システムが使えない」は、<br>お店のせいではありません。</h2>
+    <p class="sub rv d2">夜の店の管理システムは、作った人の都合で出来ています。
+      毎晩それを触るのは、パソコンの専門家ではありません。</p>
+    <div class="pains">
+      <div class="pain rv d1"><div class="q">01</div>
+        <h3>入力できる人が、一人しかいない</h3>
+        <p>その人が休むと店が止まる。教えようにも画面が難しくて、教える方も自信がない。</p></div>
+      <div class="pain rv d2"><div class="q">02</div>
+        <h3>給与計算に、毎月まる一日かかる</h3>
+        <p>指名もドリンクも手で拾う。合っているか誰も確かめられないまま、支払日が来る。</p></div>
+      <div class="pain rv d3"><div class="q">03</div>
+        <h3>今日いくら残ったのかが、月末までわからない</h3>
+        <p>売上は見えても、給料と経費を引いた後が見えない。気づいた時には赤字の日が続いている。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 声（深緑のポスター面: pin/181692166212785124） -->
+<section id="voice" class="dark">
+  <div class="wrap">
+    <div class="no rv">02 — 声で入力</div>
+    <h2 class="rv d1">押す場所を、探さなくていい。</h2>
+    <p class="sub rv d2">設定を変えたい時は、マイクを押して、そのまま話すだけ。
+      このシステムを隅から隅まで知っているAIが、聞き取って、確かめてから登録します。</p>
+    <div class="voice">
+      <div class="says">
+        <div class="say rv d1"><span class="w"><svg viewBox="0 0 24 24"><path d="M12 3v10M12 19v2M8 8v4M16 8v4M5 10v1M19 10v1"/></svg></span>「同伴バックを3000円」</div>
+        <div class="say rv d2"><span class="w"><svg viewBox="0 0 24 24"><path d="M12 3v10M12 19v2M8 8v4M16 8v4M5 10v1M19 10v1"/></svg></span>「厚生費を10パーセント」</div>
+        <div class="say rv d3"><span class="w"><svg viewBox="0 0 24 24"><path d="M12 3v10M12 19v2M8 8v4M16 8v4M5 10v1M19 10v1"/></svg></span>「開店時間を18時にして」</div>
+        <div class="say rv d4"><span class="w"><svg viewBox="0 0 24 24"><path d="M12 3v10M12 19v2M8 8v4M16 8v4M5 10v1M19 10v1"/></svg></span>「今月の目標は350万」</div>
+      </div>
+      <div class="mic rv d2">
+        <div class="micwrap"><div class="micdot"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg></div></div>
+        <div class="cap">聞き取った内容を画面に出して、<br>「これでいいですか」を必ず挟みます</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 機能 -->
+<section id="feat">
+  <div class="wrap">
+    <div class="no rv">03 — できること</div>
+    <h2 class="rv d1">毎晩の作業が、<br>そのまま数字になる。</h2>
+    <p class="sub rv d2">会計を入れる。日報をつける。レジを締める。
+      それだけで、売上・給与・粗利が同時に出来上がります。</p>
+    <div class="feats">
+      <div class="feat rv d1"><div class="ic"><svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg></div>
+        <h3>会計伝票</h3><p>卓・客数・指名・商品・サービス料。入れた瞬間に、その日の売上と客単価が動きます。</p></div>
+      <div class="feat rv d2"><div class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v3h6V3M8 11h8M8 15h5"/></svg></div>
+        <h3>日報と給与</h3><p>開始と終了を入れるだけ。バック・厚生費・残り支給まで自動。手で電卓を叩く時間が消えます。</p></div>
+      <div class="feat rv d3"><div class="ic"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v6M18 9v6"/></svg></div>
+        <h3>レジ精算</h3><p>お札と小銭の枚数を入れると、理論値との過不足がその場で出ます。合わない日をすぐ拾えます。</p></div>
+      <div class="feat rv d1"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/></svg></div>
+        <h3>収支が日ごとに見える</h3><p>赤字の日は赤く出ます。月末を待たずに「今日は残ったのか」が分かります。</p></div>
+      <div class="feat rv d2"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></div>
+        <h3>お店ごとに合わせられる</h3><p>バックの決め方も、時給も、締めの端数も。キャスト1人ずつ変えられます。</p></div>
+      <div class="feat rv d3"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg></div>
+        <h3>使い方を、その場で聞ける</h3><p>分からなくなったら画面の中で質問。答えと一緒に、その画面まで連れて行きます。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 数字（信頼: pin/181692166212818721） -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="no rv">04 — 確かさ</div>
+    <h2 class="rv d1">数字が変わらないことを、<br>毎回たしかめています。</h2>
+    <p class="sub rv d2">起動するたびに自動で検算します。1円でもズレたら、使う前に画面が教えます。</p>
+    <div class="stats">
+      <div class="stat rv d1"><div class="n">1<small>円</small></div><div class="l">今お使いのシステムとの差</div></div>
+      <div class="stat rv d2"><div class="n">91<small>項目</small></div><div class="l">毎回たしかめている計算</div></div>
+      <div class="stat rv d3"><div class="n">14<small>画面</small></div><div class="l">日々の仕事をすべて</div></div>
+      <div class="stat rv d4"><div class="n">0<small>秒</small></div><div class="l">売上を見るまでのタップ</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 導入の流れ -->
+<section id="flow">
+  <div class="wrap">
+    <div class="no rv">05 — 導入の流れ</div>
+    <h2 class="rv d1">今の数字のまま、<br>触り心地だけが変わります。</h2>
+    <p class="sub rv d2">入れ替えで一番こわいのは「数字が変わること」。
+      そこは先に、目の前で確かめてから決めていただきます。</p>
+    <div class="steps">
+      <div class="step rv d1"><div class="n">01</div><div>
+        <h3>まず、触ってみる</h3><p>その場でスマホから開けます。用意していただくものはありません。</p></div></div>
+      <div class="step rv d2"><div class="n">02</div><div>
+        <h3>お店の名前とキャストを入れる</h3><p>こちらで入れてお渡しします。ご自分のお店の画面として見ていただけます。</p></div></div>
+      <div class="step rv d3"><div class="n">03</div><div>
+        <h3>先月の数字と、突き合わせる</h3><p>今お使いのシステムと同じ数字が出るか、目の前で確かめます。ここが一番大事なところです。</p></div></div>
+      <div class="step rv d4"><div class="n">04</div><div>
+        <h3>ひと月、そのまま使ってみる</h3><p>合わなければ、やめていただいて構いません。縛りはありません。</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 締め -->
+<section class="end">
+  <div class="wrap">
+    <h2 class="rv">まず、画面を見てください。</h2>
+    <p class="rv d1">説明より、触っていただいた方が早いと思います。<br>
+      スマホでそのまま開けます。</p>
+    <div class="endcta rv d2">
+      <a class="btn p" href="https://tsujiguchilukes-ops.github.io/dsystem-kai-demo/" target="_blank" rel="noopener">画面を開いてみる
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a>
+      <a class="btn s" href="#pain">もう一度読む</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div><div class="mark" style="font-size:17px">Dsystem <b>改</b></div>
+      <div style="margin-top:8px">夜の店の、数字のための道具</div></div>
+    <div class="src">
+      デザインの参考（Pinterest）：
+      <a href="https://www.pinterest.com/pin/534543903532416057/" target="_blank" rel="noopener">巨大なセリフ＋余白の見出し</a>／
+      <a href="https://www.pinterest.com/pin/533294361818541203/" target="_blank" rel="noopener">番号で章を立てる</a>／
+      <a href="https://www.pinterest.com/pin/181692166212785124/" target="_blank" rel="noopener">深い地色のポスター面</a>／
+      <a href="https://www.pinterest.com/pin/181692166212724656/" target="_blank" rel="noopener">アクセントは1色だけ</a>／
+      <a href="https://www.pinterest.com/pin/181692166212818721/" target="_blank" rel="noopener">数字で確かさを見せる</a>／
+      <a href="https://www.pinterest.com/pin/565342559474451207/" target="_blank" rel="noopener">大きな角丸・薄い影のカード</a>／
+      <a href="https://www.pinterest.com/pin/181692166212727538/" target="_blank" rel="noopener">01/02 の積層</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// 出てくる動き（一度出たら戻さない＝スクロールで点滅しない）
+(function(){
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+  },{threshold:.12,rootMargin:'0px 0px -8% 0px'});
+  document.querySelectorAll('.rv:not(.in)').forEach(function(el){ io.observe(el); });
+  // ヘッダーの背景
+  var hd=document.getElementById('hd');
+  var darks=[].slice.call(document.querySelectorAll('.dark,.end'));
+  function upd(){
+    hd.classList.toggle('on', scrollY>40);
+    // ヘッダーの真下が深緑の面かどうかで、文字色と地色を入れ替える
+    var y=hd.offsetHeight*0.6;
+    hd.classList.toggle('dk', darks.some(function(d){
+      var r=d.getBoundingClientRect(); return r.top<=y && r.bottom>=y;
+    }));
+  }
+  addEventListener('scroll',upd,{passive:true}); upd();
+})();
+
+// ヒーローの粒（ブランド色だけ。紫や水色を混ぜない）
+(function(){
+  var c=document.getElementById('hc'); if(!c) return;
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+  var x=c.getContext('2d'),D=Math.min(devicePixelRatio||1,2),ps=[],raf;
+  function size(){ c.width=c.offsetWidth*D; c.height=c.offsetHeight*D; }
+  size(); addEventListener('resize',size,{passive:true});
+  var COL=['rgba(178,140,52,','rgba(217,180,92,','rgba(31,122,77,','rgba(23,102,63,'];
+  for(var i=0;i<70;i++) ps.push({
+    x:Math.random(), y:Math.random(), r:(Math.random()*2.1+0.7)*D,
+    sp:(Math.random()*0.16+0.05), ph:Math.random()*Math.PI*2,
+    a:Math.random()*0.3+0.12, c:COL[(Math.random()*COL.length)|0]
+  });
+  var t0=performance.now();
+  function f(now){
+    var el=(now-t0)/1000;
+    x.clearRect(0,0,c.width,c.height);
+    for(var i=0;i<ps.length;i++){ var p=ps[i];
+      var px=(p.x*c.width + Math.sin(el*p.sp+p.ph)*26*D);
+      var py=(p.y*c.height + Math.cos(el*p.sp*.8+p.ph)*20*D);
+      x.beginPath(); x.fillStyle=p.c+(p.a*(0.55+0.45*Math.sin(el*0.9+p.ph)))+')';
+      x.arc(px,py,p.r,0,Math.PI*2); x.fill();
+    }
+    raf=requestAnimationFrame(f);
+  }
+  raf=requestAnimationFrame(f);
+  addEventListener('pagehide',function(){ cancelAnimationFrame(raf); });
+})();
+</script>
+</body>
+</html>
