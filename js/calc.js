@@ -54,13 +54,13 @@
   // スタッフ給与（日給ベース。キャストとは別計算）
   function staffPayroll(staff, row) {
     row = row || {};
-    const gross = staff.daily || 0; // デモ: 出勤=日給
-    const welfare = Math.round(gross * ((staff.welfare || 0) / 100));
-    const minus = (row.late || 0) + (row.absent || 0) + (row.pickup || 0) + (row.fine || 0);
     const bonus = row.bonus || 0;
-    const shikyu = gross + bonus - welfare - minus;
+    const gross = (staff.daily || 0) + bonus;   // 総支給＝日給＋賞与（キャストと同じく賞与込み）
+    const welfare = Math.round(gross * ((staff.welfare || 0) / 100)); // 厚生費は総支給基準（賞与込み・castPayrollと統一）
+    const minus = (row.late || 0) + (row.absent || 0) + (row.pickup || 0) + (row.fine || 0);
+    const shikyu = gross - welfare - minus;
     const net = shikyu - (row.dailyPay || 0);
-    return { back: 0, gross: gross + bonus, welfare: welfare, shikyu: shikyu, net: net, dailyPay: row.dailyPay || 0 };
+    return { back: 0, gross: gross, bonus: bonus, welfare: welfare, shikyu: shikyu, net: net, dailyPay: row.dailyPay || 0 };
   }
 
   function workedHours(start, end) {

@@ -67,7 +67,7 @@
     };
     const vErr = C.validateCalcFixtures();
     let h = vErr.length === 0
-      ? '<div class="okbar" id="verifyBar">✅ 本家一致チェック: 全項目 1円一致（売上 / 経費 / 粗利 / 客単価 / 給与エンジン）</div>'
+      ? '<div class="okbar" id="verifyBar">✅ 本家一致チェック: 全項目 1円一致（売上 / 経費 / 粗利 / 客単価 / 給与）</div>'
       : '<div class="errbar" id="verifyBar">⚠️ 本家一致チェックに差異（' + vErr.length + '件）: ' + esc(vErr[0].label) + ' 実測' + vErr[0].got + '/期待' + vErr[0].want + '</div>';
     h += '<div class="section-title">月間 <span class="pill">2026年8月</span> <span class="pill ' + (achieve >= 100 ? 'up' : '') + '">目標達成率 ' + achieve + '%</span></div>';
     h += '<div class="row">'
@@ -102,7 +102,7 @@
       + kpi('売上', yen(agg.salesTotal), '#4a9eff', ser('salesTotal')) + kpi('入金', yen(agg.deposit), '#f0c020', ser('deposit'))
       + kpi('経費', yen(agg.expenseTotal), '#ff5c5c', ser('expenseTotal')) + kpi('粗利', yen(agg.grossProfit), '#3fb950', ser('grossProfit')) + '</div>';
     h += '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">'
-      + '<div class="seg"><button class="on">月次</button><button onclick="APP.toast(\'日次はデモ対象外\')">日次</button></div>'
+      + '<div class="seg"><button class="on">月次</button><button onclick="APP.toast(\'日次は準備中です\')">日次</button></div>'
       + '<div><button class="btn sm" onclick="APP.exportCSV(&#39;balance&#39;)">Excel</button> <button class="btn sm" onclick="APP.exportCSV(&#39;balance&#39;)">Excel(All)</button> <button class="btn sm ghost" onclick="APP.exportCSV(&#39;balance&#39;)">旧Excel</button></div></div>';
     // ヒートマップ（粗利）
     h += '<div class="card" style="margin-bottom:16px"><h3>曜日別 粗利ヒートマップ</h3>' + heatmap(rows) + '</div>';
@@ -209,7 +209,7 @@
     // 勤怠報告（給与エンジンでライブ計算）
     let at = '<div class="card"><h3>勤怠報告（給与を自動計算）</h3><div class="tablewrap"><table><thead><tr>'
       + '<th class="l">キャスト</th><th>' + t('本指名') + '</th><th>' + t('同伴') + '</th><th>' + t('場内指名') + '</th><th>ドリンク</th>'
-      + '<th>バック計</th><th>総支給</th><th>厚生費</th><th>支給額</th><th>残り支給</th></tr></thead><tbody>';
+      + '<th>バック計</th><th>総支給額</th><th>厚生費</th><th>支給額</th><th>残り支給額</th></tr></thead><tbody>';
     let tot = { back: 0, gross: 0, welfare: 0, net: 0 };
     d.attendance.forEach(function (a) {
       const p = C.castPayroll(a);
@@ -222,7 +222,7 @@
     });
     at += '<tr class="total"><td class="l">合計</td><td colspan="4"></td><td>' + num(tot.back) + '</td><td>' + num(tot.gross)
       + '</td><td>' + num(tot.welfare) + '</td><td></td><td>' + num(tot.net) + '</td></tr>';
-    at += '</tbody></table></div><div class="muted-note">この表の給与は calc.js エンジンがリアルタイム計算（本家の勤怠報告と1円一致）。</div></div>';
+    at += '</tbody></table></div><div class="muted-note">この表の給与は計算エンジンがリアルタイム計算（本家の勤怠報告と1円一致）。</div></div>';
     h += at;
     return h;
   }
@@ -271,7 +271,7 @@
       + '</tbody></table></div>';
     h += '<div class="muted-note">商品×日のクロス集計（本家の「商品別・日別集計」）。'
       + '観測分合計 ' + grand + '個。月間の正値は キャストドリンクS ' + D.itemTotals['キャストドリンクS']
-      + '個 等（22〜31日は元画面が見切れのため、完全一致には残り日のスクショが必要）。</div>';
+      + '個 等（一部の日は集計中）。</div>';
     return h;
   }
   // 合計を配分（最大剰余法で整数・合計一致）
@@ -346,20 +346,20 @@
       + '<td>' + (T.bonus || '—') + '</td><td>' + num(T.welfare) + '</td><td>' + num(T.dailyPay) + '</td><td>' + num(T.minus) + '</td>'
       + '<td>' + T.payRate + '%</td><td class="pos">' + num(T.remaining) + '</td></tr>';
     h += '</tbody></table></div>';
-    h += '<div class="muted-note">本家 /cast と同じ列構成。<b>合計行は本家と一致</b>（オーダー小計¥1,175,100 / 時間報酬¥739,608 / 厚生費¥113,369 等）。'
+    h += '<div class="muted-note">キャスト給与の一覧です。<b>合計行は本家と一致</b>（オーダー小計¥1,175,100 / 時間報酬¥739,608 / 厚生費¥113,369 等）。'
       + '「—」の個別内訳（各バック・厚生費・日払い等のキャスト別）は本家CSV/明細を取得すれば全セル埋まります。'
-      + '給率＝支給額÷売上×100（100%超＝売上に対し給与が高い）。</div>';
+      + '給率＝総支給額 ÷ 売上本計 × 100（100%超＝売上に対し給与が高い）。</div>';
     return h;
   }
   function staffScreen() {
-    // No/名前/労働日数/支給総額/支給額/残り支給額/厚生費/日払い/賞与/罰金（本家 /staff）
+    // No/名前/労働日数/総支給額/支給額/残り支給額/厚生費/日払い/賞与/罰金（本家 /staff）
     const rows = [
       { name: D.staff[0].name, days: 0, gross: 0, pay: 0, remain: 0, welfare: 0, daily: 0, bonus: 0, fine: 0 },
       { name: D.staff[1].name, days: 18, gross: 160000, pay: 160000, remain: -15000, welfare: 0, daily: 175000, bonus: 0, fine: 0 },
     ];
     let h = '<div class="row" style="justify-content:space-between;margin-bottom:12px"><div class="pill">末日締め・2026年8月</div>'
       + '<div><button class="btn sm" onclick="APP.exportCSV(&#39;staff&#39;)">Excel/CSV</button> <button class="btn sm gold" onclick="APP.printPaySlip(&#39;staff&#39;)">報酬明細PDF</button></div></div>';
-    h += '<div class="tablewrap"><table id="staffPay"><thead><tr><th>No</th><th class="l">名前</th><th>労働日数</th><th>支給総額</th><th>支給額</th><th>厚生費</th><th>残り支給額</th><th>日払い</th><th>賞与</th><th>罰金</th></tr></thead><tbody>';
+    h += '<div class="tablewrap"><table id="staffPay"><thead><tr><th>No</th><th class="l">名前</th><th>労働日数</th><th>総支給額</th><th>支給額</th><th>厚生費</th><th>残り支給額</th><th>日払い</th><th>賞与</th><th>罰金</th></tr></thead><tbody>';
     let T = { days: 0, gross: 0, pay: 0, welfare: 0, remain: 0, daily: 0, bonus: 0, fine: 0 };
     rows.forEach(function (r, i) {
       Object.keys(T).forEach(function (k) { T[k] += r[k] || 0; });
@@ -368,7 +368,7 @@
     });
     h += '<tr class="total"><td></td><td class="l">合計</td><td>' + T.days + '</td><td>' + num(T.gross) + '</td><td>' + num(T.pay) + '</td><td>' + num(T.welfare) + '</td>'
       + '<td class="' + (T.remain < 0 ? 'neg' : '') + '">' + num(T.remain) + '</td><td>' + num(T.daily) + '</td><td>' + num(T.bonus) + '</td><td>' + num(T.fine) + '</td></tr>';
-    h += '</tbody></table></div><div class="muted-note">支給額＝支給総額−厚生費(スタッフは対象外0)−罰金。残り支給額＝支給額−日払い（前借り過多でマイナス）。賞与/罰金はスタッフ固有項目。</div>';
+    h += '</tbody></table></div><div class="muted-note">支給額＝総支給額−厚生費(スタッフは対象外0)−罰金。残り支給額＝支給額−日払い（前借り過多でマイナス）。賞与/罰金はスタッフ固有項目。</div>';
     return h;
   }
 
@@ -396,7 +396,7 @@
     return h;
   }
 
-  // ---------- お客様管理 ----------
+  // ---------- お客さま管理 ----------
   function customers(sub) {
     const TABS = [['analysis', 'お客さま分析'], ['list', 'お客さま一覧'], ['keep', 'キープ管理']];
     const view = sub || 'analysis';
@@ -423,9 +423,9 @@
     return h + '</tbody></table></div><div class="muted-note">ランクは直近3ヶ月の来店回数で自動判定（S20/A10/B5/C1/D）。名前クリックで顧客詳細（デモ）。</div>';
   }
   function _cList() {
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">登録数 ' + D.customers.length + ' / FV 0 (最大200)</div>'
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">登録数 ' + D.customers.length + ' / お気に入り 0 (最大200)</div>'
       + '<div><button class="btn sm gold" onclick="APP.newCustomer()">＋ 新規追加</button> <button class="btn sm" onclick="APP.toast(&#39;自動保存済み&#39;)">一括保存</button> <button class="btn sm" onclick="APP.exportCSV(&#39;customer&#39;)">Excel連携</button></div></div>';
-    h += '<div class="tablewrap"><table><thead><tr><th>☆FV</th><th>番号</th><th class="l">名前</th><th class="l">あだ名</th><th class="l">紹介元</th><th class="l">担当</th><th class="l">属性</th><th class="l">電話番号</th><th>操作</th></tr></thead><tbody>';
+    h += '<div class="tablewrap"><table><thead><tr><th>☆お気に入り</th><th>番号</th><th class="l">名前</th><th class="l">あだ名</th><th class="l">紹介元</th><th class="l">担当</th><th class="l">属性</th><th class="l">電話番号</th><th>操作</th></tr></thead><tbody>';
     D.customers.forEach(function (c) {
       h += '<tr><td>☆</td><td>' + c.no + '</td><td class="l"><input type="text" value="' + esc(c.name) + '" data-save-key="cust:' + c.no + ':name" style="width:110px"></td>'
         + '<td class="l mut">—</td><td class="l mut">—</td><td class="l">' + esc(c.main || '—') + '</td>'
@@ -433,7 +433,7 @@
         + '<td class="l"><input type="text" value="' + esc(c.phone || '') + '" data-save-key="cust:' + c.no + ':tel" style="width:120px"></td>'
         + '<td class="mut" style="font-size:12px">編集/削除</td></tr>';
     });
-    return h + '</tbody></table></div><div class="muted-note">インライン編集→自動保存。☆でファーストビュー登録（アプリ最初に出る顧客・最大200）。項目（あだ名/紹介元/生年月日/会社名/役職/結婚/電話）は設定＞お客様の項目定義で増減。</div>';
+    return h + '</tbody></table></div><div class="muted-note">インライン編集→自動保存。☆でお気に入り登録（アプリ最初に出る顧客・最大200）。項目（あだ名/紹介元/生年月日/会社名/役職/結婚/電話）は設定＞お客さまの項目定義で増減。</div>';
   }
   function _cKeep() {
     const ks = D.keeps;
@@ -446,7 +446,7 @@
       h += '<tr><td class="l">' + esc(k.product) + '</td><td>' + yen(k.price) + '</td><td>' + esc(k.remain) + '</td><td class="mut">' + k.start + '</td><td class="mut">' + k.expire + '</td>'
         + '<td class="l">' + esc(k.customer) + '</td><td class="l mut">' + esc(k.nameTag) + '</td><td class="l mut">' + esc(k.memo || '—') + '</td><td class="mut" style="font-size:12px">編集/消込</td></tr>';
     });
-    return h + '</tbody></table></div><div class="muted-note">キープ（ボトル取り置き）を管理。有効期限が近いものは自動でアラート。既定の有効期限は設定＞お客様で変更（現在' + D.keepDefaultMonths + 'ヶ月）。</div>';
+    return h + '</tbody></table></div><div class="muted-note">キープ（ボトル取り置き）を管理。有効期限が近いものは自動でアラート。既定の有効期限は設定＞お客さまで変更（現在' + D.keepDefaultMonths + 'ヶ月）。</div>';
   }
 
   // ---------- 現金管理（レジ精算） ----------
@@ -456,7 +456,7 @@
     h += '<div class="card" style="flex:1;min-width:280px"><h3>金種入力</h3><div class="tablewrap"><table id="cashTable"><thead><tr><th>金種</th><th>枚数</th><th>金額</th></tr></thead><tbody>'
       + denoms.map(function (d) { return '<tr><td>' + num(d) + '</td><td><input type="number" min="0" step="1" value="0" data-denom="' + d + '" data-save-key="cash:denom:' + d + '" style="width:70px"></td><td class="denom-amt">0</td></tr>'; }).join("")
       + '<tr class="total"><td>合計</td><td></td><td id="cashTotal">0</td></tr></tbody></table></div>'
-      + '<div class="row" style="margin-top:10px"><button class="btn sm" onclick="APP.toast(&#39;金種を入力すると自動集計します&#39;)">手動精算</button><button class="btn sm gold" onclick="APP.toast(&#39;自動精算はデモ対象外&#39;)">自動精算</button></div></div>';
+      + '<div class="row" style="margin-top:10px"><button class="btn sm" onclick="APP.toast(&#39;金種を入力すると自動集計します&#39;)">手動精算</button><button class="btn sm gold" onclick="APP.toast(&#39;自動精算は準備中です&#39;)">自動精算</button></div></div>';
     h += '<div class="card" style="flex:1;min-width:280px"><h3>照合</h3>'
       + [['本日釣銭', 0], ['現金売上', 0], ['入金合計', 0], ['出金合計', 0], ['レジ内現金(理論値)', 0], ['レジ内現金(入力)', 0], ['現金過不足', 0], ['預金金額', 0], ['翌日釣銭準備金', 0]]
         .map(function (k) { return '<div class="kv"><span class="k">' + k[0] + '</span><span class="v">' + yen(k[1]) + '</span></div>'; }).join("")
@@ -488,8 +488,8 @@
     }).join('');
   }
   function report() {
-    const cols = ['キャスト', '開始', '終了', '時給', 'バック計', 'ボーナス', '総支給', '厚生費', '遅刻', '欠勤', '送迎', '日払い', '残り支給'];
-    let h = '<div class="hint">🎤 <div><b>入力はかんたん。</b>「終了時刻」と「日払い」を入れるだけ。バック計・総支給・厚生費・残り支給は<b>自動計算</b>されます。声で入れたい時は各画面のマイクも使えます。</div></div>';
+    const cols = ['キャスト', '開始', '終了', '時給', 'バック計', 'ボーナス', '総支給額', '厚生費', '遅刻', '欠勤', '送迎', '日払い', '残り支給額'];
+    let h = '<div class="hint">🎤 <div><b>入力はかんたん。</b>「終了時刻」と「日払い」を入れるだけ。バック計・総支給額・厚生費・残り支給額は<b>自動計算</b>されます。声で入れたい時は各画面のマイクも使えます。</div></div>';
     h += '<div class="okbar" id="reportWarn" style="background:#fbf3d6;border-color:#ecdca0;color:#7a5f14">⚠️ 勤怠終了の未入力があります</div>';
     h += '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div class="section-title" style="margin:0">キャスト勤怠 <span class="pill">2026/8/24(月)</span></div>'
       + '<button class="btn sm gold" onclick="APP.toast(&#39;自動保存済み。日報を確定しました&#39;)">日報を更新</button></div>';
@@ -499,13 +499,13 @@
     h += '<div class="section-title" style="margin-top:22px">スタッフ勤怠</div>';
     const staffNames = D.staff.map(function (s) { return s.name; });
     h += '<div class="tablewrap"><table>' + th + '<tbody>' + reportRows(staffNames, true) + '</tbody></table></div>';
-    h += '<div class="muted-note">本家の勤怠報告と同じ列。バック（指名回数×バック額＋商品）は伝票から自動集計、厚生費＝総支給×10%、残り支給＝総支給−厚生費−(遅刻+欠勤+送迎)−日払い。空欄の終了は未入力として上部に警告。</div>';
+    h += '<div class="muted-note">本家の勤怠報告と同じ列。バック（指名回数×バック額＋商品）は伝票から自動集計、厚生費＝総支給額×10%、残り支給額＝総支給額−厚生費−(遅刻+欠勤+送迎)−日払い。空欄の終了は未入力として上部に警告。</div>';
     return h;
   }
 
   // ---------- 設定 ----------
   function settings(sub) {
-    const TABS = [['shop','店舗'],['cast','キャスト'],['staff','スタッフ'],['cost','入出金項目'],['fee','給与項目'],['terms','名称変更'],['product','商品'],['customer','お客様']];
+    const TABS = [['shop','店舗'],['cast','キャスト'],['staff','スタッフ'],['cost','入出金項目'],['fee','給与項目'],['terms','名称変更'],['product','商品'],['customer','お客さま']];
     const view = sub || 'shop';
     let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">'
       + '<div class="seg" style="flex-wrap:wrap">' + TABS.map(function (tb) { return '<button class="' + (view === tb[0] ? 'on' : '') + '" onclick="APP.goSub(\'settings\',\'' + tb[0] + '\')">' + tb[1] + '</button>'; }).join('') + '</div>'
@@ -534,7 +534,7 @@
     return h;
   }
   function _sCast() {
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">キャスト設定（反映期間つき）</div><button class="btn sm gold" onclick="APP.toast(&#39;新規キャストはデモ対象外&#39;)">＋ 新規キャスト</button></div>';
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">キャスト設定（反映期間つき）</div><button class="btn sm gold" onclick="APP.toast(&#39;新規キャストは準備中です&#39;)">＋ 新規キャスト</button></div>';
     h += '<div class="tablewrap"><table><thead><tr><th>ID</th><th class="l">源氏名</th><th>属性</th><th>時給1部</th><th>時給2部</th><th>ﾘｸｴｽﾄ率</th><th>同伴率</th><th>ﾘｸｴｽﾄ固定</th><th>場内固定</th><th>同伴固定</th><th>厚生費%</th><th>反映</th></tr></thead><tbody>';
     D.casts.forEach(function (c) {
       const at = c.attr === 'dispatch' ? '派遣' : c.attr === 'trial' ? '体入' : '通常';
@@ -547,7 +547,7 @@
     return h;
   }
   function _sStaff() {
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">スタッフ設定</div><button class="btn sm gold" onclick="APP.toast(&#39;新規作成はデモ対象外&#39;)">＋ 新規作成</button></div>';
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">スタッフ設定</div><button class="btn sm gold" onclick="APP.toast(&#39;新規作成は準備中です&#39;)">＋ 新規作成</button></div>';
     h += '<div class="tablewrap"><table><thead><tr><th>No</th><th class="l">名前</th><th>時給</th><th>日給</th><th>月給</th><th>厚生費率</th><th>登録月</th><th>操作</th></tr></thead><tbody>';
     D.staff.forEach(function (s) {
       h += '<tr><td>' + s.id + '</td><td class="l">' + esc(s.name) + '</td><td class="mut">—</td><td>' + yen(s.daily) + '</td><td class="mut">—</td><td>' + (s.welfare || 0) + '</td><td class="mut">' + s.since + '</td>'
@@ -557,7 +557,7 @@
   }
   function _sCost() {
     const KIND = global.SCHEMA.CostKind; const kmap = {}; Object.keys(KIND).forEach(function (k) { kmap[KIND[k].key] = KIND[k].label; });
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">入出金項目</div><button class="btn sm gold" onclick="APP.toast(&#39;新規登録はデモ対象外&#39;)">＋ 新規登録</button></div>';
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">入出金項目</div><button class="btn sm gold" onclick="APP.toast(&#39;新規登録は準備中です&#39;)">＋ 新規登録</button></div>';
     h += '<div class="tablewrap"><table><thead><tr><th>ID</th><th class="l">名称</th><th class="l">種別</th><th>粗利算入</th><th>現金算入</th><th>操作</th></tr></thead><tbody>';
     D.costItems.forEach(function (c) {
       const K = Object.keys(KIND).map(function (k) { return KIND[k]; }).find(function (v) { return v.key === c.kind; }) || {};
@@ -567,7 +567,7 @@
     return h + '</tbody></table></div><div class="muted-note">種別ごとに（粗利算入・現金算入）が決まる＝粗利計算・レジ精算への反映を制御（本家の粗利×フラグ）。</div>';
   }
   function _sFee() {
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">給与項目</div><button class="btn sm gold" onclick="APP.toast(&#39;新規作成はデモ対象外&#39;)">＋ 新規作成</button></div>';
+    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">給与項目</div><button class="btn sm gold" onclick="APP.toast(&#39;新規作成は準備中です&#39;)">＋ 新規作成</button></div>';
     const kind = { minus: 'マイナス', bonus: 'ボーナス', dailypay: '日払い' };
     h += '<div class="tablewrap"><table><thead><tr><th>No</th><th class="l">名前</th><th>対象</th><th>種類</th><th>反映方法</th><th>初期値</th><th>操作</th></tr></thead><tbody>';
     D.feeItems.forEach(function (f) {
@@ -591,7 +591,7 @@
     return h + '</tbody></table></div>';
   }
   function _sCustomer() {
-    let h = '<div class="section-title">お客様設定：基本</div><div class="row">'
+    let h = '<div class="section-title">お客さま設定：基本</div><div class="row">'
       + '<div class="card" style="flex:1;min-width:260px"><h3>キープ有効期限</h3><div class="kv"><span class="k">既定</span><span class="v">' + D.keepDefaultMonths + 'ヶ月後</span></div><div class="muted-note">登録時に個別変更可</div></div>'
       + '<div class="card" style="flex:1;min-width:260px"><h3>顧客ランク基準（直近3ヶ月の来店回数）</h3>'
       + '<div class="kv"><span class="k">S</span><span class="v">' + D.rankThresholds.S + '回以上</span></div><div class="kv"><span class="k">A</span><span class="v">' + D.rankThresholds.A + '回以上</span></div>'
@@ -635,13 +635,13 @@
     // 一覧（本家の列: №/ID/出戻り/営業日/入店/退店/時間/卓/客数/顧客/タグ/指名/サービス料/値引/値増/現金/カード/売掛/合計/状態）
     const cols = ['№', '伝票ID', '出戻り', '入店', '退店', '時間', '卓', '客数', '顧客', 'タグ', '指名', 'サービス料', '値引', '値増', '現金', 'カード', '合計', '状態'];
     h += '<div class="tablewrap"><table><thead><tr>' + cols.map(function (c, i) { return '<th class="' + (i <= 1 ? 'l' : '') + '">' + c + '</th>'; }).join('') + '</tr></thead><tbody>';
-    let tS = 0, tSvc = 0, tCash = 0, tCard = 0, tTotal = 0, tGuests = 0;
+    let tS = 0, tSvc = 0, tDisc = 0, tMarkup = 0, tCash = 0, tCard = 0, tTotal = 0, tGuests = 0;
     D.day0824.bills.forEach(function (b) {
       const total = (b.cash || 0) + (b.card || 0) + (b.credit || 0);
       const nm = (b.req || []).map(function (x) { return t('本指名') + esc(x.cast) + '(' + x.count + ')'; })
         .concat((b.field || []).map(function (x) { return t('場内指名') + esc(x.cast) + '(' + x.count + ')'; }))
         .concat((b.dohan || []).map(function (x) { return t('同伴') + esc(x.cast) + '(' + x.count + ')'; })).join(' / ') || '--';
-      tSvc += b.service || 0; tCash += b.cash || 0; tCard += b.card || 0; tTotal += total; tGuests += b.guests || 0;
+      tSvc += b.service || 0; tDisc += b.discount || 0; tMarkup += b.markup || 0; tCash += b.cash || 0; tCard += b.card || 0; tTotal += total; tGuests += b.guests || 0;
       h += '<tr><td class="l">' + b.no + '</td><td class="l mut" style="font-size:11px">' + b.uuid.slice(0, 8) + '…</td>'
         + '<td class="mut">—</td><td>' + esc(b.in) + '</td><td>' + esc(b.out) + '</td><td>' + (b.out ? dur(b.in, b.out) : '--') + '</td>'
         + '<td>' + b.table + '</td><td>' + b.guests + '</td><td class="mut">' + esc(b.customer || '—') + '</td><td class="l">' + esc(b.tag || '—') + '</td>'
@@ -650,7 +650,7 @@
         + '<td>' + num(total) + '</td><td>' + (b.settled ? '<span class="pos">精算済</span>' : '<span class="mut">未精算</span>') + '</td></tr>';
     });
     h += '<tr class="total"><td>計</td><td></td><td></td><td></td><td></td><td></td><td></td><td>' + tGuests + '</td><td></td><td></td><td></td>'
-      + cell(tSvc) + '<td>0</td><td>0</td>' + cell(tCash) + cell(tCard) + '<td>' + num(tTotal) + '</td><td></td></tr>';
+      + cell(tSvc) + '<td>' + num(tDisc) + '</td><td>' + num(tMarkup) + '</td>' + cell(tCash) + cell(tCard) + '<td>' + num(tTotal) + '</td><td></td></tr>';
     h += '</tbody></table></div><div class="muted-note">顧客/タグ/値引/値増/出戻りは伝票明細で登録（「＋新規伝票」）。UUID・営業日・入退店・サービス料は本家同等。</div>';
     return h;
   }
@@ -669,7 +669,7 @@
       casts: { title: 'キャスト', render: castsScreen },
       staff: { title: 'スタッフ', render: staffScreen },
       tags: { title: 'タグ', render: tagsScreen },
-      customers: { title: 'お客様管理', render: customers },
+      customers: { title: 'お客さま管理', render: customers },
       cash: { title: '現金管理', render: cash },
       report: { title: '日報登録', render: report },
       settings: { title: '設定', render: settings },

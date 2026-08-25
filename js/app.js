@@ -34,7 +34,7 @@
     { id: 'casts', label: 'キャスト' },
     { id: 'staff', label: 'スタッフ' },
     { id: 'tags', label: 'タグ' },
-    { id: 'customers', label: 'お客様管理' },
+    { id: 'customers', label: 'お客さま管理' },
     { sec: '運用' },
     { id: 'cash', label: '現金管理' },
     { id: 'report', label: '日報登録', badge: '!' },
@@ -185,10 +185,12 @@
   // 長い別名から先にマッチさせる（「場内」より「場内リクエストバック」優先）
   VSET.forEach(function(s){ s.aliases.sort(function(a,b){ return b.length-a.length; }); });
   const SET_RANGE={ openHour:[0,23], joshiClosingDay:[1,99], reqBackAmount:[0,100000], fieldBackAmount:[0,100000], dohanBackAmount:[0,100000], welfareRatePct:[0,50], target:[0,100000000] };
+  // 設定キー→日本語ラベル（画面に内部キーを出さない）
+  const SET_LABEL={}; VSET.forEach(function(s){ SET_LABEL[s.key]=s.aliases[0]; });
   function getSetting(k){ if(k==='welfareRatePct') return Math.round(DATA.store.welfareRate*100); return DATA.store[k]; }
   function setSetting(k,v){
     const r=SET_RANGE[k];
-    if(r && (!Number.isFinite(v) || v<r[0] || v>r[1])){ toast('「'+k+'」は '+r[0]+'〜'+r[1]+' で入力してください（入力値: '+v+'）'); return false; }
+    if(r && (!Number.isFinite(v) || v<r[0] || v>r[1])){ toast('「'+(SET_LABEL[k]||k)+'」は '+r[0]+'〜'+r[1]+' で入力してください（入力値: '+v+'）'); return false; }
     if(k==='welfareRatePct') DATA.store.welfareRate = v/100; else DATA.store[k]=v;
     const st=loadStore(); st.store=st.store||{};
     st.store[k==='welfareRatePct'?'welfareRate':k] = (k==='welfareRatePct'? v/100 : v);
@@ -397,7 +399,7 @@
       + 'th,td{border:1px solid #4a5260;padding:7px 9px;text-align:right}th,td:first-child{text-align:left}'
       + 'body{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
       + '@media print{button{display:none}}</style>'
-      + '<h1>報酬明細 — ' + (kind === 'staff' ? 'スタッフ' : 'キャスト') + ' / 2026年8月（Lounge）</h1>'
+      + '<h1>報酬明細 — ' + (kind === 'staff' ? 'スタッフ' : 'キャスト') + ' / 2026年8月（' + DATA.store.name + '）</h1>'
       + '<button onclick="print()" style="padding:8px 16px;margin:8px 0">印刷 / PDF保存</button>' + inner);
     w.document.close(); setTimeout(function () { try { w.print(); } catch (e) {} }, 400);
   }
@@ -434,7 +436,7 @@
       const v = function (id) { return document.getElementById(id).value; };
       const nv = function (id) { return Number(v(id)) || 0; };
       const timeRe = /^([01]?\d|2[0-3]):[0-5]\d$/;
-      if (!timeRe.test(v('nbIn').trim()) || !timeRe.test(v('nbOut').trim())) { toast('入店/退店は HH:MM で入力してください'); return; }
+      if (!timeRe.test(v('nbIn').trim()) || !timeRe.test(v('nbOut').trim())) { toast('入店・退店は「21:00」のように入力してください'); return; }
       const guests = nv('nbGuests'); if (!Number.isInteger(guests) || guests <= 0) { toast('客数は1以上で入力してください'); return; }
       const prod = v('nbProd'), qty = nv('nbQty');
       const bill = {
@@ -462,12 +464,12 @@
     { k:['レジ','現金','精算','金種','お金','過不足'], a:'「現金管理」で<b>金種（お札・小銭）の枚数</b>を入れると金額と合計が自動計算。理論値との差（過不足）も出ます。', go:'cash' },
     { k:['商品','ドリンク','ボトル','何本','数量'], a:'「売上商品集計」で商品ごとの売れた数・売上・バックが見られます。「商品別・日別」タブで日別クロス表も。', go:'items' },
     { k:['タグ','集客','担当','紹介'], a:'「タグ」は集客担当ごとの売上集計です。まとめの「タグ対象額」と連動します。', go:'tags' },
-    { k:['お客','顧客','ランク','キープ'], a:'「お客様管理」で顧客のランク（S〜D）や属性を管理します。ランクは直近3ヶ月の来店回数で自動判定。', go:'customers' },
+    { k:['お客','顧客','ランク','キープ'], a:'「お客さま管理」で顧客のランク（S〜D）や属性を管理します。ランクは直近3ヶ月の来店回数で自動判定。', go:'customers' },
     { k:['保存','バックアップ','消え','復元','戻す'], a:'入力は<b>自動保存</b>されます。念のため「設定」の<b>バックアップ書き出し</b>でファイル保存、別端末では「読み込み」で復元できます。', go:'settings' },
     { k:['一致','検算','合ってる','正しい','1円'], a:'「まとめ」上部の緑バーが<b>本家システムと1円一致</b>の自動チェックです。ズレると赤で理由が出ます。', go:'summary' },
     { k:['用語','名前','呼び方','リクエスト','指名'], a:'「設定」の用語カスタマイズで、本指名→リクエスト等、店の呼び方に変えられます（次に開いた画面から反映）。', go:'settings' },
     { k:['スマホ','携帯','戻る','メニュー'], a:'スマホは左上の三本線でメニュー。表は横スクロール、カードは縦積みで見やすくなります。' },
-    { k:['起動','開き方','開けない','立ち上げ'], a:'デスクトップの「Dシステム改を起動.command」をダブルクリック。音声を使うので http://localhost で開きます。' },
+    { k:['起動','開き方','開けない','立ち上げ'], a:'デスクトップの「Dシステム改を起動.command」をダブルクリックすると開きます。音声入力に対応しています。' },
   ];
   function helpAnswer(q){
     if(!q||!q.trim()) return { a:'「日報の入力は？」「音声で設定を変えたい」「レジ精算のやり方」など、知りたい操作を話すか入力してください。' };
@@ -522,7 +524,7 @@
       if (store.store) Object.keys(store.store).forEach(function (k) { DATA.store[k] = store.store[k]; });
       if (Array.isArray(store.bills)) DATA.day0824.bills = store.bills;
       if (Array.isArray(store.customers)) DATA.customers = store.customers;
-      // お客様一覧のインライン編集（名前/電話）をDATAへ反映＝分析・キープ画面でも一致
+      // お客さま一覧のインライン編集（名前/電話）をDATAへ反映＝分析・キープ画面でも一致
       Object.keys(inp).forEach(function (k) { if (k.indexOf('cust:') === 0 && inp[k] != null) applyCustInput(k, inp[k]); });
     } catch (e) {}
     buildNav();
@@ -562,7 +564,7 @@
       document.getElementById('content').innerHTML =
         '<div class="errbar"><b>本家一致チェックに失敗しました（' + errs.length + '件）</b><br>'
         + errs.map(function (e) { return '・' + e.label + ': 実測 ' + e.got.toLocaleString() + ' / 期待 ' + e.want.toLocaleString() + ' (差 ' + e.diff + ')'; }).join('<br>')
-        + '<br>次の一手: data.js の該当値 / calc.js の端数処理を確認</div>';
+        + '<br>次の一手: 入力した数値をご確認のうえ、直らない場合は管理者へご連絡ください</div>';
       return;
     }
     // 起動アニメ: 2.6秒後に完全非表示。クリック/タップでスキップ
