@@ -688,10 +688,29 @@
   }
 
   function history() {
-    return '<div class="card"><h3>変更履歴（監査ログ）</h3><div class="tablewrap"><table><thead><tr><th>日時</th><th class="l">操作</th><th class="l">内容</th></tr></thead><tbody>'
-      + '<tr><td>2026-08-24 23:38</td><td class="l">日報更新</td><td class="l">8/24 キャスト勤怠を更新</td></tr>'
-      + '<tr><td>2026-08-24 21:30</td><td class="l">伝票作成</td><td class="l">卓1 / ゆき❄️ 場内</td></tr>'
-      + '</tbody></table></div><div class="muted-note">誰が・いつ・何を・旧値/新値を記録（デモ・実記録は対象外）。</div></div>';
+    // 実際に記録している変更履歴（app.js の pushAudit）をそのまま出す
+    let rows = [];
+    try {
+      const st = JSON.parse(localStorage.getItem('d-system-kai:v1') || '{}');
+      rows = Array.isArray(st.audit) ? st.audit.slice().reverse() : [];
+    } catch (e) {}
+    let h = '<div class="hint">🕐 <div>設定を変えた記録が残ります。<b>いつ・何を・どう変えたか</b>を後から追えるので、給与でもめた時にここを見せれば説明できます。</div></div>';
+    h += '<div class="card"><h3>変更履歴</h3><div class="tablewrap"><table><thead><tr>'
+      + '<th class="l">日時</th><th class="l">操作</th><th class="l">対象</th><th class="l">前</th><th class="l">後</th></tr></thead><tbody>';
+    if (!rows.length) {
+      h += '<tr><td class="l mut" colspan="5">まだ記録はありません。設定を変えるとここに残ります。</td></tr>';
+    } else {
+      rows.forEach(function (r) {
+        const d = new Date(r.at);
+        const when = isNaN(d.getTime()) ? esc(r.at) : (d.getMonth() + 1) + '/' + d.getDate() + ' '
+          + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        h += '<tr><td class="l mut">' + when + '</td><td class="l">' + esc(r.action) + '</td>'
+          + '<td class="l">' + esc(r.target) + '</td>'
+          + '<td class="l mut">' + esc(r.before) + '</td><td class="l"><b>' + esc(r.after) + '</b></td></tr>';
+      });
+    }
+    h += '</tbody></table></div><div class="muted-note">直近500件まで残ります。バックアップにも一緒に書き出されます。</div></div>';
+    return h;
   }
 
   // ---------- 伝票一覧 ----------
