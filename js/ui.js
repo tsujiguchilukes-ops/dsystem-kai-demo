@@ -67,8 +67,8 @@
     };
     const vErr = C.validateCalcFixtures();
     let h = vErr.length === 0
-      ? '<div class="okbar" id="verifyBar">✅ 本家一致チェック: 全項目 1円一致（売上 / 経費 / 粗利 / 客単価 / 給与）</div>'
-      : '<div class="errbar" id="verifyBar">⚠️ 本家一致チェックに差異（' + vErr.length + '件）: ' + esc(vErr[0].label) + ' 実測' + vErr[0].got + '/期待' + vErr[0].want + '</div>';
+      ? '<div class="okbar" id="verifyBar">✅ 計算チェック: 全項目そろっています（売上 / 経費 / 粗利 / 客単価 / 給与）</div>'
+      : '<div class="errbar" id="verifyBar">⚠️ 計算チェックで差が出ています（' + vErr.length + '件）: ' + esc(vErr[0].label) + ' 出た値' + num(vErr[0].got) + ' / あるべき値' + num(vErr[0].want) + '</div>';
     h += '<div class="section-title">月間 <span class="pill">2026年8月</span> <span class="pill ' + (achieve >= 100 ? 'up' : '') + '">目標達成率 ' + achieve + '%</span></div>';
     h += '<div class="row">'
       + card('店舗状況', '#8b5cf6', num(m.guests) + '<span class="unit">人</span> / ' + num(m.groups) + '<span class="unit">組</span>', '',
@@ -78,7 +78,11 @@
       + card('経費累計', '#ff5c5c', yen(m.expenseTotal), '',
           [['人件費-女子', yen(m.laborFemale)], ['人件費-男子', yen(m.laborMale)], ['諸経費', yen(m.misc)]])
       + card('入金累計', '#f0c020', yen(m.deposit), '',
-          [['粗利', '<span class="pos">' + yen(m.grossProfit) + '</span>']])
+          [['粗利', '<span class="pos">' + yen(m.grossProfit) + '</span>'],
+           ['粗利率', (m.salesTotal ? (m.grossProfit / m.salesTotal * 100).toFixed(1) : '0.0') + '%'],
+           ['目標まで', (m.salesTotal >= D.store.target
+              ? '<span class="pos">達成</span>'
+              : yen(D.store.target - m.salesTotal))]])
       + '</div>';
     // 当日は伝票から導出（固定値を置かない＝伝票を1枚足せば全部動く）
     const TD = C.todayAggregate(D.day0824.bills, D.day0824.attendance);
@@ -88,9 +92,15 @@
       + card('店舗状況', '#8b5cf6', st.guests + '<span class="unit">人</span> / ' + st.groups + '<span class="unit">組</span>', '',
           [['客単価', yen(st.perGuest)], ['組単価', yen(st.perGroup)], [t('本指名') + '本計', yen(st.reqHon)],
            ['<span class="mut" style="font-size:11px">※精算済のみ</span>', '<span class="mut" style="font-size:11px">未精算' + yen(TD.unsettled.sales) + 'はリアルタイム</span>']])
-      + card('売上', '#4a9eff', yen(st.sales), '', [['現金', yen(st.cash)], ['カード', yen(st.card)]])
-      + card('経費', '#ff5c5c', yen(d0824.expenseTotal), '', [['人件費-女子', yen(TD.joshiPay)]])
-      + card('入金', '#f0c020', yen(d0824.deposit || 0), '', [['粗利', '<span class="pos">' + yen(st.sales + (d0824.deposit || 0) - d0824.expenseTotal) + '</span>']])
+      + card('売上', '#4a9eff', yen(st.sales), '',
+          [['現金', yen(st.cash)], ['売掛', yen(st.credit)], ['カード', yen(st.card)]])
+      + card('経費', '#ff5c5c', yen(d0824.expenseTotal), '',
+          [['人件費-女子', yen(d0824.remainingPay)], ['日払い', yen(d0824.maleDaily + d0824.femaleDaily)],
+           ['諸経費', yen(d0824.withdrawal)]])
+      + card('入金', '#f0c020', yen(d0824.deposit || 0), '',
+          [['粗利', '<span class="pos">' + yen(st.sales + (d0824.deposit || 0) - d0824.expenseTotal) + '</span>'],
+           ['粗利率', (st.sales ? ((st.sales + (d0824.deposit || 0) - d0824.expenseTotal) / st.sales * 100).toFixed(1) : '0.0') + '%'],
+           ['未精算を含む売上', yen(TD.all.sales)]])
       + '</div>';
     h += '<div class="card" style="margin-top:16px"><h3><span class="cap" style="background:#3fb950"></span>売上推移</h3>' + salesChart(D.financeDaily) + '</div>';
     return h;

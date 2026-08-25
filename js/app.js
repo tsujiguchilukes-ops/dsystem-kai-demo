@@ -620,6 +620,11 @@
   function helpGo(id){ helpToggle(false); go(id); }
 
   function init() {
+    // 起動アニメは初回だけたっぷり見せる。2回目からは素早く消す（営業中に待たせない）
+    try {
+      if (localStorage.getItem('d-system-kai:seen')) document.body.classList.add('seen');
+      localStorage.setItem('d-system-kai:seen', '1');
+    } catch (e) {}
     // 保存済みの用語カスタマイズ・設定値を起動時に適用（再読み込みでも効く）
     try {
       const store = loadStore();

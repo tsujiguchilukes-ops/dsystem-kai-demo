@@ -28,7 +28,8 @@
   var cx=function(){return W()/2;}, cy=function(){return H()*0.46;};
   var R=function(){return Math.min(W(),H())*0.30;};
   var N = reduce?0:420, ps=[];
-  var COL=['#5eead4','#7ee6cf','#c4b5fd','#a5b4ff','#e9c46a'];
+  // ブランドの色だけで組む。紫・水色を混ぜると途端に既製品っぽくなる
+  var COL=['#b28c34','#c9a44c','#d9c188','#1f7a4d','#2f9160','#efe7d4'];
   for(var i=0;i<N;i++){
     var a=Math.random()*Math.PI*2, rr=R()*(0.82+Math.random()*0.5), sp=(Math.random()*0.5+0.35)*(Math.random()<0.5?1:1);
     ps.push({a:a, r:rr, base:rr, sp:0.006+Math.random()*0.010, sz:(Math.random()*2.4+0.6)*DPR,

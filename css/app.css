@@ -196,6 +196,11 @@ th.stickyc{background:var(--bg3);z-index:2}
 .splash{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(120% 120% at 50% 40%, #ffffff 0%, #f6f3ec 55%, #eaf1ec 100%);
   animation:splashOut .8s ease 3.8s forwards}
+/* 2回目以降は素早く消す。毎日何度も開く道具なので、初回だけ見せる */
+body.seen .splash{animation:splashOut .5s ease .9s forwards}
+body.seen .splash-logo{animation-duration:.5s;animation-delay:.05s}
+body.seen .splash-line{animation-duration:.45s;animation-delay:.25s}
+body.seen .splash-sub{animation-duration:.4s;animation-delay:.4s}
 .splash-inner{text-align:center;transform:translateY(6px)}
 .splash-logo{font-family:var(--serif);font-size:44px;font-weight:700;color:var(--green);letter-spacing:2px;
   opacity:0;transform:translateY(14px);animation:splashUp .9s cubic-bezier(.2,.8,.2,1) .15s forwards}
