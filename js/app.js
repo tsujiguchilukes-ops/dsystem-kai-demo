@@ -78,6 +78,33 @@
     try { localStorage.setItem(SKEY, JSON.stringify(o)); markSaved(); }
     catch (e) { showError('保存に失敗しました', String(e && e.message || e), 'ブラウザのプライベートモード/容量を確認してください'); }
   }
+  function persistCasts() { const st = loadStore(); st.casts = DATA.casts; saveStore(st); }
+  // キャストの追加（本家にある機能）
+  function newCast() {
+    const body = '<div class="row" style="gap:12px">'
+      + '<div style="flex:1;min-width:150px"><label>源氏名</label><br><input id="ncName" type="text" style="width:100%"></div>'
+      + '<div style="flex:1;min-width:110px"><label>時給1部</label><br><input id="ncWage" type="number" min="0" value="2000" style="width:100%"></div>'
+      + '<div style="flex:1;min-width:110px"><label>厚生費%</label><br><input id="ncWel" type="number" min="0" value="10" style="width:100%"></div>'
+      + '</div><div class="muted-note">バックは後から1人ずつ変えられます。空欄ならお店の設定に従います。</div>';
+    modal('キャストを追加', body, function () {
+      const name = document.getElementById('ncName').value.trim();
+      if (!name) { toast('源氏名を入れてください'); return; }
+      if (DATA.casts.some(function (c) { return c.name === name; })) { toast('同じ源氏名がすでにあります'); return; }
+      const wage = Number(document.getElementById('ncWage').value) || 0;
+      const wel = document.getElementById('ncWel').value.trim();
+      const id = Math.max.apply(null, DATA.casts.map(function (c) { return c.id; }).concat([100])) + 1;
+      DATA.casts.push({ id: id, name: name, attr: 'normal', wage1: wage, wage2: 0, welfare: wel === '' ? null : Number(wel) });
+      persistCasts(); pushAudit('キャスト追加', name, '(なし)', '時給' + wage);
+      closeModal(); toast(name + ' を追加しました'); render(currentId, currentSub);
+    }, '追加する');
+  }
+  function deleteCast(name) {
+    const used = (DATA.day0824.attendance || []).some(function (a) { return a.cast === name; });
+    if (!confirm(name + ' を削除します。' + (used ? '\n※このキャストは当日の勤怠に入っています。' : '') + '\nよろしいですか？')) return;
+    DATA.casts = DATA.casts.filter(function (c) { return c.name !== name; });
+    persistCasts(); pushAudit('キャスト削除', name, 'あり', 'なし');
+    toast(name + ' を削除しました'); render(currentId, currentSub);
+  }
   function persistData() { const st = loadStore(); st.bills = DATA.day0824.bills; st.customers = DATA.customers; saveStore(st); }
   function markSaved() {
     const p = document.getElementById('ymPill');
@@ -311,16 +338,37 @@
   // 日報の未入力バナーを実データで更新（固定文字列にしない）
   function updateReportWarning() {
     const bar = document.getElementById('reportWarn'); if (!bar) return;
-    const ends = document.querySelectorAll('#content [data-rfield="end"]');
-    let noEnd = 0; ends.forEach(function (e) { if (!e.value.trim()) noEnd++; });
-    if (noEnd === 0) {
-      bar.className = 'okbar';
-      bar.style.cssText = '';
-      bar.innerHTML = '✅ 勤怠すべて入力済み';
-    } else {
+    // 「開始が入っている人」＝その日出勤した人だけを数える。
+    // 休みの人まで数えると毎日「未入力12人」と出続けて、本当の入れ忘れを見逃す。
+    let working = 0, noEnd = 0;
+    document.querySelectorAll('#content tr[data-rrow]').forEach(function (row) {
+      const st = row.querySelector('[data-rfield="start"]'), en = row.querySelector('[data-rfield="end"]');
+      if (!st || !st.value.trim()) return;      // 開始が空＝休み
+      working++;
+      if (!en || !en.value.trim()) noEnd++;
+    });
+    // 率バックなのに元の売上が取れていない人（黙って0円になるのを気づけるように）
+    const rw = (typeof CALC.takeRateWarnings === 'function') ? CALC.takeRateWarnings() : [];
+    const kindName = { req: 'リクエスト', field: '場内', dohan: '同伴' };
+    const warn = function (html) {
       bar.className = 'okbar';
       bar.style.cssText = 'background:#fbf3d6;border-color:#ecdca0;color:#7a5f14';
-      bar.innerHTML = '⚠️ 未入力: 勤怠終了 ' + noEnd + '人 — 各行の「終了」を入力してください';
+      bar.innerHTML = html;
+    };
+    if (rw.length) {
+      const names = rw.map(function (w) { return w.cast + 'の' + (kindName[w.kind] || w.kind); });
+      warn('⚠️ バックを「%」で設定していますが、元になる売上が入っていないため <b>0円</b>で計算されています（'
+        + names.slice(0, 3).join('・') + (names.length > 3 ? ' ほか' : '') + '）— 伝票を登録するか、金額での設定に変えてください');
+      return;
+    }
+    if (working === 0) {
+      bar.className = 'okbar'; bar.style.cssText = '';
+      bar.innerHTML = '出勤したキャストの「開始」を入れると、給与がその場で計算されます';
+    } else if (noEnd === 0) {
+      bar.className = 'okbar'; bar.style.cssText = '';
+      bar.innerHTML = '✅ 出勤 ' + working + '人 すべて入力済み';
+    } else {
+      warn('⚠️ 未入力: 勤怠終了 ' + noEnd + '人 — 各行の「終了」を入力してください（出勤 ' + working + '人）');
     }
   }
 
@@ -491,7 +539,7 @@
     modal('新規伝票（明細入力）', body, function () {
       const v = function (id) { return document.getElementById(id).value; };
       const nv = function (id) { return Number(v(id)) || 0; };
-      const timeRe = /^([01]?\d|2[0-3]):[0-5]\d$/;
+      const timeRe = /^([0-2]?\d):[0-5]\d$/;   // 25:00・26:00（翌日）も受ける
       if (!timeRe.test(v('nbIn').trim()) || !timeRe.test(v('nbOut').trim())) { toast('入店・退店は「21:00」のように入力してください'); return; }
       const guests = nv('nbGuests'); if (!Number.isInteger(guests) || guests <= 0) { toast('客数は1以上で入力してください'); return; }
       const prod = v('nbProd'), qty = nv('nbQty');
@@ -577,9 +625,10 @@
       const store = loadStore();
       const inp = store.inputs || {};
       Object.keys(inp).forEach(function (k) { if (k.indexOf('term:') === 0 && inp[k]) DATA.terms[k.slice(5)] = inp[k]; });
-      if (store.store) Object.keys(store.store).forEach(function (k) { DATA.store[k] = store.store[k]; });
+      if (store.store) Object.keys(store.store).forEach(function (k) { DATA.store[k] = store.store[k]; });  // 数値・文字列・真偽値すべて
       if (Array.isArray(store.bills)) DATA.day0824.bills = store.bills;
       if (Array.isArray(store.customers)) DATA.customers = store.customers;
+      if (Array.isArray(store.casts) && store.casts.length) DATA.casts = store.casts;
       // お客さま一覧のインライン編集（名前/電話）をDATAへ反映＝分析・キープ画面でも一致
       Object.keys(inp).forEach(function (k) { if (k.indexOf('cust:') === 0 && inp[k] != null) applyCustInput(k, inp[k]); });
     } catch (e) {}
@@ -607,6 +656,74 @@
     document.getElementById('content').addEventListener('change', function (e) {
       const el = e.target;
       if (el.hasAttribute && el.hasAttribute('data-term')) toast('用語を更新しました（次の画面から反映）');
+      // キャストごとの時給・厚生費
+      if (el.hasAttribute && el.hasAttribute('data-cast')) {
+        const name = el.getAttribute('data-cast'), field = el.getAttribute('data-field');
+        const c = (DATA.casts || []).find(function (x) { return x.name === name; });
+        if (c) {
+          const raw = el.value.trim();
+          const before = c[field];
+          if (raw === '') { c[field] = (field === 'welfare' ? null : 0); }
+          else {
+            const v = Number(raw);
+            if (!Number.isFinite(v) || v < 0) { toast('0以上の数字を入れてください'); return; }
+            c[field] = v;
+          }
+          persistCasts();
+          pushAudit('キャスト設定', name + ' の' + ({wage1:'時給1部',wage2:'時給2部',welfare:'厚生費%'}[field] || field),
+                    String(before == null ? '(店舗に従う)' : before), String(c[field] == null ? '(店舗に従う)' : c[field]));
+          toast(name + ' の設定を保存しました');
+        }
+        return;
+      }
+      // キャストごとの指名バック（金額 or %／空欄＝店舗に従う）
+      if (el.hasAttribute && el.hasAttribute('data-castback')) {
+        const name = el.getAttribute('data-castback'), kind = el.getAttribute('data-kind');
+        const c = (DATA.casts || []).find(function (x) { return x.name === name; });
+        if (c) {
+          const row = el.closest('td');
+          const vEl = row.querySelector('[data-field="value"]'), mEl = row.querySelector('[data-field="mode"]');
+          const mode = mEl.value, raw = vEl.value.trim();
+          c.back = c.back || {};
+          const before = c.back[kind] ? (c.back[kind].value + (c.back[kind].mode === 'rate' ? '%' : '円')) : '(店舗に従う)';
+          if (!mode || raw === '') { delete c.back[kind]; }
+          else {
+            const v = Number(raw);
+            if (!Number.isFinite(v) || v < 0) { toast('0以上の数字を入れてください'); return; }
+            c.back[kind] = { mode: mode, value: v };
+          }
+          persistCasts();
+          pushAudit('キャスト設定', name + ' の' + ({req:'リクエストバック',field:'場内バック',dohan:'同伴バック'}[kind]),
+                    before, c.back[kind] ? (c.back[kind].value + (mode === 'rate' ? '%' : '円')) : '(店舗に従う)');
+          toast(name + ' のバックを保存しました');
+          render(currentId, currentSub);
+        }
+        return;
+      }
+      // 計算方法の選択（給率の分子/分母・端数・折半）
+      if (el.hasAttribute && el.hasAttribute('data-choice')) {
+        const k = el.getAttribute('data-choice');
+        const before = DATA.store[k];
+        let v = el.value;
+        if (v === 'true' || v === 'false') v = (v === 'true');
+        DATA.store[k] = v;
+        const st = loadStore(); st.store = st.store || {}; st.store[k] = v; saveStore(st);
+        pushAudit('計算方法の変更', k, String(before), String(v));
+        toast('計算方法を変更しました（画面の数字に反映されます）');
+        render(currentId, currentSub);
+        return;
+      }
+      // 2部時給の開始時刻
+      if (el.hasAttribute && el.hasAttribute('data-timeset')) {
+        const k = el.getAttribute('data-timeset'), v = el.value.trim();
+        if (v && !/^([0-2]?\d):[0-5]\d$/.test(v)) { toast('時刻は「22:00」のように入力してください'); return; }
+        const before = DATA.store[k];
+        DATA.store[k] = v;
+        const st = loadStore(); st.store = st.store || {}; st.store[k] = v; saveStore(st);
+        pushAudit('設定変更', k, String(before || '(なし)'), String(v || '(なし)'));
+        toast(v ? '2部時給の開始を ' + v + ' にしました' : '2部時給を使わない設定にしました');
+        return;
+      }
       if (el.hasAttribute && el.hasAttribute('data-setting')) {
         const key = el.getAttribute('data-setting'); const v = normNum(el.value);
         if (Number.isFinite(v)) { setSetting(key, Math.round(v * 1000) / 1000); toast('設定を保存しました'); }
@@ -652,7 +769,37 @@
           const raw = JSON.parse(r.result); const clean = { inputs: {}, store: {} };
           if (raw && typeof raw === 'object') {
             if (raw.inputs && typeof raw.inputs === 'object') Object.keys(raw.inputs).forEach(function (k) { const v = raw.inputs[k]; if (typeof v === 'string' && v.length <= 200) clean.inputs[k] = v; });
-            if (raw.store && typeof raw.store === 'object') Object.keys(raw.store).forEach(function (k) { const v = raw.store[k]; if (typeof v === 'number' && Number.isFinite(v)) clean.store[k] = v; });
+            // 店舗設定は数値だけでなく、文字列（給率の分子/分母・端数・2部開始）・真偽値・
+            // バックの形（{mode,value}）も戻す。ここを数値だけにすると計算方法が黙って初期化される。
+            if (raw.store && typeof raw.store === 'object') Object.keys(raw.store).forEach(function (k) {
+              const v = raw.store[k];
+              if (typeof v === 'number' && Number.isFinite(v)) clean.store[k] = v;
+              else if (typeof v === 'string' && v.length <= 40) clean.store[k] = v;
+              else if (typeof v === 'boolean') clean.store[k] = v;
+              else if (v && typeof v === 'object' && (v.mode === 'fixed' || v.mode === 'rate')
+                       && typeof v.value === 'number' && Number.isFinite(v.value) && v.value >= 0) {
+                clean.store[k] = { mode: v.mode, value: v.value };
+              }
+            });
+            // キャスト個別の時給・厚生費・バックも戻す
+            if (Array.isArray(raw.casts)) {
+              clean.casts = raw.casts.filter(function (c) { return c && typeof c.name === 'string'; })
+                .map(function (c) {
+                  const o = { id: Number(c.id) || 0, name: String(c.name).slice(0, 40), attr: c.attr || 'normal',
+                              wage1: Number(c.wage1) || 0, wage2: Number(c.wage2) || 0,
+                              welfare: (c.welfare == null ? null : Number(c.welfare)) };
+                  if (c.back && typeof c.back === 'object') {
+                    o.back = {};
+                    ['req', 'field', 'dohan'].forEach(function (k) {
+                      const b = c.back[k];
+                      if (b && (b.mode === 'fixed' || b.mode === 'rate') && Number.isFinite(Number(b.value))) {
+                        o.back[k] = { mode: b.mode, value: Number(b.value) };
+                      }
+                    });
+                  }
+                  return o;
+                });
+            }
             // 伝票・お客さまも必ず戻す（ここを捨てると「戻したのに消えた」になる）
             if (Array.isArray(raw.bills)) clean.bills = raw.bills.filter(function (b) { return b && typeof b === 'object'; });
             if (Array.isArray(raw.customers)) clean.customers = raw.customers.filter(function (c) { return c && typeof c === 'object'; });
@@ -661,8 +808,8 @@
             if (raw.cashClose && typeof raw.cashClose === 'object') clean.cashClose = raw.cashClose;
             if (Array.isArray(raw.audit)) clean.audit = raw.audit.slice(-500);
           }
-          const nb = (clean.bills || []).length, nc = (clean.customers || []).length;
-          if (!confirm('今のデータを、このバックアップで上書きします。\n（伝票 ' + nb + '件 / お客さま ' + nc + '件）\nよろしいですか？')) { toast('読み込みを取りやめました'); return; }
+          const nb = (clean.bills || []).length, nc = (clean.customers || []).length, nk = (clean.casts || []).length;
+          if (!confirm('今のデータを、このバックアップで上書きします。\n（伝票 ' + nb + '件 / お客さま ' + nc + '件 / キャスト ' + nk + '名）\nよろしいですか？')) { toast('読み込みを取りやめました'); return; }
           saveStore(clean); toast('読み込みました'); location.reload();
         }
         catch (e) { showError('読み込みに失敗しました', String(e && e.message || e), '正しいバックアップJSONを選んでください'); }
@@ -691,7 +838,7 @@
     }, btn);
   }
   global.APP = { go: go, goSub: goSub, toast: toast, backupExport: backupExport, backupImport: backupImport, voiceCommand: voiceCommand, voiceField: voiceField,
-    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable, cashClose: cashClose, cashRecalc: recalcCash,
+    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable, cashClose: cashClose, cashRecalc: recalcCash, newCast: newCast, deleteCast: deleteCast,
     toggleCastZero: function (v) { UI.setHideZeroCast(v); render('castItems'); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

@@ -119,12 +119,12 @@
       tb += '<tr' + (neg ? ' class="neg-row"' : '') + '>'
         + '<td class="l stickyc">' + fmtDate(r) + '</td>'
         + cell(r.cash) + cell(r.credit) + cell(r.card) + cell(r.salesTotal) + cell(r.reqSub) + cell(r.dohanSub)
-        + cell(r.remainingPay) + '<td>' + (r.payRate ? r.payRate.toFixed(2) + '%' : '--') + '</td>'
+        + cell(r.remainingPay) + '<td>' + (r.salesTotal ? C.payRate(r).toFixed(2) + '%' : '--') + '</td>'
         + cell(r.maleDaily) + cell(r.femaleDaily) + cell(r.minus) + cell(r.deposit) + cell(r.withdrawal) + cell(r.expenseTotal)
         + '<td class="' + (neg ? 'neg' : 'pos') + '">' + num(r.grossProfit) + '</td></tr>';
     });
     tb += '<tr class="total"><td class="l stickyc">合計</td>' + cell(agg.cash) + cell(agg.credit) + cell(agg.card) + cell(agg.salesTotal)
-      + cell(agg.reqSub) + cell(agg.dohanSub) + cell(agg.remainingPay) + '<td>' + (D.monthSummary.salesTotal ? (D.monthSummary.laborFemale / D.monthSummary.salesTotal * 100).toFixed(2) + '%' : '--') + '</td>'
+      + cell(agg.reqSub) + cell(agg.dohanSub) + cell(agg.remainingPay) + '<td>' + C.payRateMonth(D.financeDaily, D.store.monthlyAdjust).toFixed(2) + '%' + '</td>'
       + cell(agg.maleDaily) + cell(agg.femaleDaily) + cell(agg.minus) + cell(agg.deposit) + cell(agg.withdrawal) + cell(agg.expenseTotal)
       + '<td class="pos">' + num(agg.grossProfit) + '</td></tr>';
     tb += '</tbody></table></div>';
@@ -354,7 +354,7 @@
     h += '</tbody></table></div>';
     h += '<div class="muted-note">キャスト給与の一覧です。<b>合計行は本家と一致</b>（オーダー小計¥1,175,100 / 時間報酬¥739,608 / 厚生費¥113,369 等）。'
       + '「—」の個別内訳（各バック・厚生費・日払い等のキャスト別）は本家CSV/明細を取得すれば全セル埋まります。'
-      + '給率＝総支給額 ÷ 売上本計 × 100（100%超＝売上に対し給与が高い）。</div>';
+      + '給率＝（残り支給額＋女子日払い）÷ 売上計 × 100（100%超＝売上に対し給与が高い）。</div>';
     return h;
   }
   function staffScreen() {
@@ -433,10 +433,10 @@
       + '<div><button class="btn sm gold" onclick="APP.newCustomer()">＋ 新規追加</button> <button class="btn sm" onclick="APP.toast(&#39;自動保存済み&#39;)">一括保存</button> <button class="btn sm" onclick="APP.exportCSV(&#39;customer&#39;)">Excel連携</button></div></div>';
     h += '<div class="tablewrap"><table><thead><tr><th>☆お気に入り</th><th>番号</th><th class="l">名前</th><th class="l">あだ名</th><th class="l">紹介元</th><th class="l">担当</th><th class="l">属性</th><th class="l">電話番号</th><th>操作</th></tr></thead><tbody>';
     D.customers.forEach(function (c) {
-      h += '<tr><td>☆</td><td>' + c.no + '</td><td class="l"><input type="text" value="' + esc(c.name) + '" data-save-key="cust:' + c.no + ':name" style="width:110px"></td>'
+      h += '<tr><td>☆</td><td>' + c.no + '</td><td class="l"><input type="text" value="' + esc(c.name) + '" data-save-key="cust:' + c.no + ':name" style="width:140px"></td>'
         + '<td class="l mut">—</td><td class="l mut">—</td><td class="l">' + esc(c.main || '—') + '</td>'
         + '<td class="l">' + c.attrs.slice(0, 2).map(function (a) { return '<span class="tag" style="font-size:11px">' + esc(a) + '</span>'; }).join(' ') + '</td>'
-        + '<td class="l"><input type="text" value="' + esc(c.phone || '') + '" data-save-key="cust:' + c.no + ':tel" style="width:120px"></td>'
+        + '<td class="l"><input type="text" value="' + esc(c.phone || '') + '" data-save-key="cust:' + c.no + ':tel" style="width:140px"></td>'
         + '<td class="mut" style="font-size:12px">編集/削除</td></tr>';
     });
     return h + '</tbody></table></div><div class="muted-note">インライン編集→自動保存。☆でお気に入り登録（アプリ最初に出る顧客・最大200）。項目（あだ名/紹介元/生年月日/会社名/役職/結婚/電話）は設定＞お客さまの項目定義で増減。</div>';
@@ -487,14 +487,14 @@
       || { cast: name, start: '', end: null, drinks: [], req: { count: 0 }, dohan: { count: 0 }, field: { count: 0 }, bonus: 0, minus: 0, dailyPay: 0 };
   }
   function reportRows(list, isStaff) {
-    const numin = function (ck, f, v) { return '<td><input type="number" min="0" value="' + (v || 0) + '" data-rcast="' + ck + '" data-rfield="' + f + '" data-save-key="report:' + ck + ':' + f + '" style="width:66px"></td>'; };
+    const numin = function (ck, f, v) { return '<td><input type="number" min="0" value="' + (v || 0) + '" data-rcast="' + ck + '" data-rfield="' + f + '" data-save-key="report:' + ck + ':' + f + '" style="width:78px"></td>'; };
     return list.map(function (name) {
       const ck = esc(name); const base = reportBase(name);
       const c = D.casts.find(function (x) { return x.name === name; }) || { wage1: (isStaff ? 0 : 0) };
       const p = C.castPayroll(base);
       return '<tr data-rrow="' + ck + '"><td class="l stickyc">' + ck + '</td>'
-        + '<td><input type="text" value="' + esc(base.start || '') + '" placeholder="--:--" data-rcast="' + ck + '" data-rfield="start" data-save-key="report:' + ck + ':start" style="width:62px"></td>'
-        + '<td><input type="text" value="" placeholder="--:--" data-rcast="' + ck + '" data-rfield="end" data-save-key="report:' + ck + ':end" style="width:62px"></td>'
+        + '<td><input type="text" value="' + esc(base.start || '') + '" placeholder="--:--" data-rcast="' + ck + '" data-rfield="start" data-save-key="report:' + ck + ':start" style="width:74px"></td>'
+        + '<td><input type="text" value="" placeholder="--:--" data-rcast="' + ck + '" data-rfield="end" data-save-key="report:' + ck + ':end" style="width:74px"></td>'
         + '<td class="mut">' + yen(c.wage1 || (isStaff ? 0 : 0)) + '</td>'
         + '<td class="r-back">' + num(p.back) + '</td>'
         + numin(ck, 'bonus', 0)
@@ -540,27 +540,59 @@
       + setRow('リクエストバック金額', 'reqBackAmount', s.reqBackAmount, '円') + setRow('場内リクエストバック金額', 'fieldBackAmount', s.fieldBackAmount, '円')
       + setRow('同伴バック金額', 'dohanBackAmount', s.dohanBackAmount, '円') + setRow('厚生費比率', 'welfareRatePct', Math.round(s.welfareRate * 100), '%')
       + setRow('月間目標', 'target', s.target, '円') + '</div>';
-    h += '<div class="card" style="flex:1;min-width:280px"><h3>計算方法（本家準拠）</h3>'
-      + '<div class="kv"><span class="k">給率</span><span class="v">総支給額 ÷ 売上本計 ×100</span></div>'
-      + '<div class="kv"><span class="k">端数</span><span class="v">四捨五入・小数1位</span></div>'
-      + '<div class="kv"><span class="k">厚生費対象</span><span class="v">勤怠給+指名/注文バック+ボーナス</span></div>'
-      + '<div class="kv"><span class="k">指名本数</span><span class="v">セット数分カウント</span></div>'
-      + '<div class="kv"><span class="k">ハーフ指名</span><span class="v">1固定</span></div>'
-      + '<div class="kv"><span class="k">キャスト時給</span><span class="v">2部制</span></div>'
-      + '<div class="muted-note">※マイナスは厚生費対象外</div></div></div>';
+    h += '<div class="card" style="flex:1;min-width:300px"><h3>計算方法（お店に合わせて変えられます）</h3>'
+      + pickRow('給率の分子', 'payRateNumerator', s.payRateNumerator, [
+          ['remainPlusFemaleDaily', '残り支給額＋女子日払い'], ['remainOnly', '残り支給額のみ'],
+          ['laborTotal', '人件費すべて（男子日払い・ボーナス込み）']], '既定は左（今お使いのシステムと同じ）')
+      + pickRow('給率の分母', 'payRateDenominator', s.payRateDenominator, [
+          ['salesTotal', '売上計'], ['honkei', 'リクエスト＋同伴'], ['cash', '現金売上']])
+      + pickRow('端数の処理', 'rounding', s.rounding, [
+          ['round', '四捨五入'], ['floor', '切り捨て'], ['ceil', '切り上げ']])
+      + pickRow('折半の余り', 'splitSpreadRemainder', String(s.splitSpreadRemainder), [
+          ['false', '配らない（合計が数円ズレます）'], ['true', '先頭のお客さまに寄せる（合計が合います）']],
+          '今お使いのシステムは「配らない」です')
+      + timeRow('2部時給の開始', 'part2Hour', s.part2Hour, '空欄なら2部を使いません。キャストごとの2部単価は「キャスト」タブで設定します')
+      + '<div class="muted-note">厚生費の対象＝バック＋時給報酬＋ボーナス（マイナスは対象外）。'
+      + '指名バックの金額・率は下の「キャスト」タブでキャストごとに変えられます。</div></div></div>';
     return h;
   }
   function _sCast() {
-    let h = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">キャスト設定（反映期間つき）</div><button class="btn sm gold" onclick="APP.toast(&#39;新規キャストは準備中です&#39;)">＋ 新規キャスト</button></div>';
-    h += '<div class="tablewrap"><table><thead><tr><th>ID</th><th class="l">源氏名</th><th>属性</th><th>時給1部</th><th>時給2部</th><th>ﾘｸｴｽﾄ率</th><th>同伴率</th><th>ﾘｸｴｽﾄ固定</th><th>場内固定</th><th>同伴固定</th><th>厚生費%</th><th>反映</th></tr></thead><tbody>';
+    let h = '<div class="hint">🎤 <div>キャストごとに<b>時給・バック・厚生費</b>を変えられます。'
+      + '空欄にすると「お店の設定に従う」になります。数字を直したその場で保存され、給与計算にすぐ反映されます。</div></div>';
+    h += '<div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="pill">キャスト設定</div>'
+      + '<button class="btn sm gold" onclick="APP.newCast()">＋ 新規キャスト</button></div>';
+    h += '<div class="tablewrap"><table><thead><tr><th>ID</th><th class="l">源氏名</th><th>属性</th>'
+      + '<th>時給1部</th><th>時給2部</th><th>ﾘｸｴｽﾄ</th><th>場内</th><th>同伴</th><th>厚生費%</th><th>操作</th></tr></thead><tbody>';
+    // バックは「金額」か「%」かを選べる。空欄＝店舗設定に従う
+    const backCell = function (c, kind) {
+      const ov = (c.back && c.back[kind]) || null;
+      const mode = ov ? ov.mode : '';
+      const val  = ov ? ov.value : '';
+      return '<td><span class="ig" style="gap:2px">'
+        + '<input type="number" min="0" step="0.01" value="' + esc(val) + '" placeholder="店舗"'
+        + ' data-castback="' + esc(c.name) + '" data-kind="' + kind + '" data-field="value" style="width:72px">'
+        + '<select data-castback="' + esc(c.name) + '" data-kind="' + kind + '" data-field="mode" style="width:56px">'
+        + '<option value=""' + (mode === '' ? ' selected' : '') + '>店舗</option>'
+        + '<option value="fixed"' + (mode === 'fixed' ? ' selected' : '') + '>円</option>'
+        + '<option value="rate"' + (mode === 'rate' ? ' selected' : '') + '>%</option>'
+        + '</select></span></td>';
+    };
     D.casts.forEach(function (c) {
       const at = c.attr === 'dispatch' ? '派遣' : c.attr === 'trial' ? '体入' : '通常';
+      const numin = function (field, v, w) {
+        return '<td><input type="number" min="0" value="' + esc(v == null ? '' : v) + '" placeholder="店舗"'
+          + ' data-cast="' + esc(c.name) + '" data-field="' + field + '" style="width:' + (w || 84) + 'px"></td>';
+      };
       h += '<tr><td>' + c.id + '</td><td class="l">' + esc(c.name) + '</td><td class="mut">' + at + '</td>'
-        + '<td>' + yen(c.wage1) + '</td><td>' + yen(c.wage2 || 0) + '</td><td class="mut">0%</td><td class="mut">0%</td>'
-        + '<td>' + yen(D.store.reqBackAmount) + '</td><td>' + yen(D.store.fieldBackAmount) + '</td><td>' + yen(D.store.dohanBackAmount) + '</td>'
-        + '<td>' + c.welfare + '</td><td class="mut">この期間以降</td></tr>';
+        + numin('wage1', c.wage1) + numin('wage2', c.wage2 || '')
+        + backCell(c, 'req') + backCell(c, 'field') + backCell(c, 'dohan')
+        + numin('welfare', c.welfare, 64)
+        + '<td><button class="btn sm" onclick="APP.deleteCast(\'' + esc(c.name).replace(/'/g, "&#39;") + '\')">削除</button></td></tr>';
     });
-    h += '</tbody></table></div><div class="muted-note">時給1部/2部・指名バック率or固定額・厚生費比率をキャスト個別に設定。反映期間で月ごとの改定を管理（本家同等）。</div>';
+    h += '</tbody></table></div>'
+      + '<div class="muted-note">「店舗」を選ぶと、お店の設定（設定＞店舗）の値を使います。'
+      + '「円」＝1回いくら、「%」＝その区分の売上に対する割合。今お使いのシステムの初期値は '
+      + 'リクエスト' + yen(D.store.reqBack.value) + '・場内' + yen(D.store.fieldBack.value) + '・同伴' + yen(D.store.dohanBack.value) + ' の固定額です。</div>';
     return h;
   }
   function _sStaff() {
@@ -622,6 +654,23 @@
   function kvedit(k, v) { return '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>'; }
   function micSvg() { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0"/><path d="M12 17v4M9 21h6"/></svg>'; }
   // 設定の1行（ラベル＋数値入力＋マイク）。data-setting で保存・音声反映
+  // 時刻の設定（空欄なら使わない）
+  function timeRow(label, key, val, note) {
+    const id = 'time_' + key;
+    return '<div class="setrow"><label for="' + id + '">' + label + '</label>'
+      + '<span class="ig"><input id="' + id + '" type="text" data-timeset="' + key + '" value="' + esc(val || '') + '" placeholder="例 22:00" style="width:110px"></span>'
+      + (note ? '<div class="muted-note" style="flex-basis:100%">' + esc(note) + '</div>' : '') + '</div>';
+  }
+  // 選択式の設定（店舗ごとに計算のしかたを変える）
+  function pickRow(label, key, val, opts, note) {
+    const id = 'pick_' + key;
+    return '<div class="setrow"><label for="' + id + '">' + label + '</label>'
+      + '<span class="ig"><select id="' + id + '" data-choice="' + key + '" style="min-width:190px">'
+      + opts.map(function (o) {
+          return '<option value="' + esc(o[0]) + '"' + (String(val) === String(o[0]) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+        }).join('')
+      + '</select></span>' + (note ? '<div class="muted-note" style="flex-basis:100%">' + esc(note) + '</div>' : '') + '</div>';
+  }
   function setRow(label, key, val, unit) {
     const id = 'set_' + key;
     return '<div class="setrow"><label for="' + id + '">' + label + '</label>'

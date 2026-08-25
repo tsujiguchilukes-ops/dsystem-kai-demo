@@ -8,6 +8,9 @@
   // ---- 店舗設定（計算パラメータ・確定値） ----
   const store = {
     registerFloat: 30000,   // 前日から繰り越す釣銭（レジ精算の理論値に使う）
+    // 月次補正: キャスト調整額・月給・スタッフ月給・源泉徴収の合計。日別行には出ず月合計にだけ乗る
+    // （観測ログ③151-153行。金額15,000は「給率33.45%」と「経費計1,217,589」の差から逆算して確定）
+    monthlyAdjust: 15000,
     name: "草加 Lua",
     openHour: 16,                 // 営業日境界
     joshiClosingDay: 99,          // 女子報酬締め日（99=月末）
@@ -15,8 +18,23 @@
     fieldBackAmount: 500,         // 場内リクエストバック金額
     dohanBackAmount: 2000,        // 同伴バック金額
     welfareRate: 0.10,            // 厚生費比率 10%
-    payRateNumerator: "gross",    // 給率分子: 総支給額
-    payRateDenominator: "honkei", // 給率分母: 売上本計
+    // ---- 給率の決め方（本家と同じく店舗ごとに選べる）----
+    // 既定は観測どおり: 分子=残り支給額+女子日払い / 分母=売上計
+    // 分子 remainPlusFemaleDaily | remainOnly | laborTotal
+    // 分母 salesTotal | honkei(リクエスト+同伴) | cash
+    payRateNumerator: "remainPlusFemaleDaily",
+    payRateDenominator: "salesTotal",
+    // ---- 端数処理（round=四捨五入 / floor=切捨 / ceil=切上）既定は観測どおり四捨五入 ----
+    rounding: "round",
+    // ---- 折半の余り（false=本家と同じで配らない＝合計が1円ズレる / true=先頭に配る）----
+    splitSpreadRemainder: false,
+    // ---- 2部時給の開始時刻（空なら2部を使わない）----
+    part2Hour: "",
+    // ---- 指名バックの決め方（mode: fixed=1回いくら / rate=その区分売上の何%）----
+    // キャスト個別に上書きできる（キャスト側が null なら、ここに従う）
+    reqBack:   { mode: "fixed", value: 500 },
+    fieldBack: { mode: "fixed", value: 500 },
+    dohanBack: { mode: "fixed", value: 2000 },
     target: 3500000,              // 月間目標（デモ用・現場改善機能）
   };
 
@@ -273,6 +291,8 @@
 
   global.DATA = {
     customers: customers, keeps: keeps,
+    // 出荷時の値の写し。ユーザーが設定を変えても検算はこれで回す（誤って赤バーを出さないため）
+    SEED: JSON.parse(JSON.stringify({ store: store, casts: casts })),
     store, terms, t, casts, staff, products, costItems, feeItems, tags,
     customerAttributes, customerFields, rankThresholds, keepDefaultMonths,
     financeDaily, monthSummary, itemTotals, itemDaily, itemDailyCols, day0824,
