@@ -213,6 +213,23 @@
     return { all: all, unsettled: unsettled, settled: settled, joshiPay: joshiPay, castCount: attendance.length };
   }
 
+  // 入出金レコードの集計。粗利に入れるか・現金に入れるかは項目の種別で決まる（観測ログ505-515行）
+  // ここを通さずに素朴に足すと「粗利×」の出金まで粗利から引いてしまう。
+  function flowTotals(flows) {
+    const K = (global.SCHEMA && global.SCHEMA.CostKind) || {};
+    const byKey = {}; Object.keys(K).forEach(function (k) { byKey[K[k].key] = K[k]; });
+    const acc = { grossIn: 0, grossOut: 0, cashIn: 0, cashOut: 0, excludedGross: 0, excludedCash: 0 };
+    (flows || []).forEach(function (f) {
+      const rule = byKey[f.kind]; if (!rule) return;
+      const amt = f.amount || 0;
+      if (rule.inGross) { if (rule.io === "in") acc.grossIn += amt; else acc.grossOut += amt; }
+      else acc.excludedGross += amt;
+      if (rule.inCash) { if (rule.io === "in") acc.cashIn += amt; else acc.cashOut += amt; }
+      else acc.excludedCash += amt;
+    });
+    return acc;
+  }
+
   // 月間集計（financeDaily の合算）
   function monthAggregate(rows) {
     const acc = { cash:0, credit:0, card:0, salesTotal:0, reqSub:0, dohanSub:0,
@@ -332,7 +349,7 @@
   }
 
   global.CALC = {
-    staffPayroll: staffPayroll, todayAggregate: todayAggregate, backRule: backRule, roundBy: roundBy, wagePayFor: wagePayFor, payRateParts: payRateParts, categorySales: categorySales, takeRateWarnings: takeRateWarnings, payRate: payRate, payRateMonth: payRateMonth, billTotal: billTotal, drinkBack, nominationBack, castPayroll, workedHours, unitPrice,
+    staffPayroll: staffPayroll, todayAggregate: todayAggregate, backRule: backRule, roundBy: roundBy, wagePayFor: wagePayFor, payRateParts: payRateParts, categorySales: categorySales, flowTotals: flowTotals, takeRateWarnings: takeRateWarnings, payRate: payRate, payRateMonth: payRateMonth, billTotal: billTotal, drinkBack, nominationBack, castPayroll, workedHours, unitPrice,
     monthAggregate, splitBill, validateCalcFixtures, productByName,
   };
 })(typeof window !== "undefined" ? window : globalThis);

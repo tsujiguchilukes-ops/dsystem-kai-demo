@@ -302,16 +302,12 @@
   function castItems() {
     // 実績のある商品 × キャスト9人 の完全クロス集計（個数）。CDrinkS実測シェアで各商品を配分。
     const share = { "しずく🌙": 172, "べる☆": 123, "はるか🌻": 83, "ゆき❄️": 49, "リリ☆": 47, "みずき☆": 46, "りく🎣": 44, "りん🔔": 36, "らん🍖": 17 };
-    const castNames = Object.keys(share);
+    // 実データ（data.js の castItemGrid）で描く。推定配分をやめた。
+    const grid = D.castItemGrid || {};
+    const castNames = Object.keys(grid);
     let prods = Object.keys(D.itemTotals);
-    // grid[cast][prod]
-    const grid = {}; castNames.forEach(function (c) { grid[c] = {}; });
-    Object.keys(D.itemTotals).forEach(function (pn) {
-      const alloc = distribute(D.itemTotals[pn], castNames.map(function (c) { return share[c]; }));
-      castNames.forEach(function (c, i) { grid[c][pn] = alloc[i]; });
-    });
     // 「0個を除外」＝どのキャストも0の商品列を隠す
-    if (_hideZeroCast) prods = prods.filter(function (pn) { return castNames.some(function (c) { return grid[c][pn] > 0; }); });
+    if (_hideZeroCast) prods = prods.filter(function (pn) { return castNames.some(function (c) { return (grid[c][pn] || 0) > 0; }); });
     let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">'
       + '<div class="seg"><button onclick="APP.go(\'items\')">商品別</button><button class="on">キャスト別</button></div>'
       + '<div><label style="margin-right:8px"><input type="checkbox"' + (_hideZeroCast ? ' checked' : '') + ' onchange="APP.toggleCastZero(this.checked)" style="width:auto;min-height:auto"> 0個を除外</label>'
@@ -320,12 +316,14 @@
     const colTot = {}; prods.forEach(function (p) { colTot[p] = 0; }); let grand = 0;
     castNames.forEach(function (c) {
       let rowTot = 0;
-      const cells = prods.map(function (p) { const v = grid[c][p]; colTot[p] += v; rowTot += v; return '<td>' + (v || '') + '</td>'; }).join('');
+      const cells = prods.map(function (p) { const v = grid[c][p] || 0; colTot[p] += v; rowTot += v; return '<td>' + (v || '') + '</td>'; }).join('');
       grand += rowTot;
       h += '<tr><td class="l stickyc">' + esc(c) + '</td>' + cells + '<td>' + rowTot + '</td></tr>';
     });
     h += '<tr class="total"><td class="l stickyc">計</td>' + prods.map(function (p) { return '<td>' + colTot[p] + '</td>'; }).join('') + '<td>' + grand + '</td></tr>';
-    return h + '</tbody></table></div><div class="muted-note">キャスト×商品の完全クロス集計（個数）。列合計は商品別集計と一致（キャストドリンクS ' + D.itemTotals['キャストドリンクS'] + '個 等）。個別配分は実測シェアに基づくデモ値。</div>';
+    return h + '</tbody></table></div><div class="muted-note">キャスト×商品の個数。'
+      + '商品ごとの合計は「売上商品集計」と一致します（キャストドリンクS ' + D.itemTotals['キャストドリンクS'] + '個 等）。'
+      + '<br>※人別の内訳は、本家の同画面が未取得のため一部を仮の値で埋めています（商品ごとの合計と、6名の総個数は実測どおり）。</div>';
   }
 
   // ---------- キャスト給与（月次サマリ） ----------
@@ -580,7 +578,7 @@
       const val  = ov ? ov.value : '';
       return '<td><span class="ig" style="gap:2px">'
         + '<input type="number" min="0" step="0.01" value="' + esc(val) + '" placeholder="店舗"'
-        + ' data-castback="' + esc(c.name) + '" data-kind="' + kind + '" data-field="value" style="width:72px">'
+        + ' data-castback="' + esc(c.name) + '" data-kind="' + kind + '" data-field="value" style="width:86px">'
         + '<select data-castback="' + esc(c.name) + '" data-kind="' + kind + '" data-field="mode" style="width:56px">'
         + '<option value=""' + (mode === '' ? ' selected' : '') + '>店舗</option>'
         + '<option value="fixed"' + (mode === 'fixed' ? ' selected' : '') + '>円</option>'
