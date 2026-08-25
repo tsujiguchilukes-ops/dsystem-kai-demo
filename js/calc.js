@@ -79,6 +79,32 @@
   // 客単価/組単価
   function unitPrice(salesTotal, guests) { return guests ? Math.round(salesTotal / guests) : 0; }
 
+  // ---- 当日集計（伝票と勤怠から導出）----
+  // 画面に固定値を書かず必ずここを通す。伝票を1枚足したら当日の数字が全部動くのが本家の挙動。
+  function billTotal(b) { return (b.cash || 0) + (b.card || 0) + (b.credit || 0); }
+  function todayAggregate(bills, attendance) {
+    bills = bills || []; attendance = attendance || [];
+    const bucket = function (list) {
+      const a = { sales: 0, cash: 0, card: 0, credit: 0, guests: 0, groups: 0, joshiSales: 0, reqHon: 0 };
+      list.forEach(function (b) {
+        a.sales += billTotal(b); a.cash += b.cash || 0; a.card += b.card || 0; a.credit += b.credit || 0;
+        a.guests += b.guests || 0; a.groups += 1;
+        // 女子売上＝本指名(リクエスト)が付いた伝票の売上（場内のみの伝票は含めない＝本家の観測に一致）
+        if ((b.req || []).length) a.joshiSales += billTotal(b);
+        a.reqHon += (b.req || []).reduce(function (s, x) { return s + (x.count || 0); }, 0);
+      });
+      a.perGuest = unitPrice(a.sales, a.guests);
+      a.perGroup = unitPrice(a.sales, a.groups);
+      return a;
+    };
+    const all = bucket(bills);
+    const unsettled = bucket(bills.filter(function (b) { return !b.settled; }));
+    const settled = bucket(bills.filter(function (b) { return !!b.settled; }));
+    // 女子給料＝出勤キャストの残り支給額の合計
+    const joshiPay = attendance.reduce(function (s, a) { return s + castPayroll(a).net; }, 0);
+    return { all: all, unsettled: unsettled, settled: settled, joshiPay: joshiPay, castCount: attendance.length };
+  }
+
   // 月間集計（financeDaily の合算）
   function monthAggregate(rows) {
     const acc = { cash:0, credit:0, card:0, salesTotal:0, reqSub:0, dohanSub:0,
@@ -93,15 +119,17 @@
     return acc;
   }
 
-  // 折半（円未満切捨・余りは先頭者へ配賦＝合計が元金額と一致）※0除算・NaNを弾く
+  // 折半（本家仕様を厳密に踏襲）：1明細＝単価÷人数の円未満切捨。余りは配賦しない。
+  // 観測ログ346-349行「10,000円を3人→1人3,333円→合計9,999円で表示（1円ズレる）」
+  // ※合計を元金額に合わせる“親切”をすると本家と数字が変わる＝完全再現でなくなるため、あえて踏襲する。
+  //   代わりに lostYen（欠ける円）を返し、画面側で注意表示できるようにする（本家に無い改善）。
   function splitBill(originalPrice, splitCount) {
     const price = Number(originalPrice), count = Number(splitCount);
     if (!Number.isInteger(price) || price < 0) throw new Error("折半元金額は0以上の整数円: " + originalPrice);
     if (!Number.isInteger(count) || count <= 0) throw new Error("折半人数は1以上の整数: " + splitCount);
     const unit = Math.floor(price / count);
-    const rem = price - unit * count; // 0..count-1
-    const shares = []; for (let i = 0; i < count; i++) shares.push(unit + (i < rem ? 1 : 0));
-    const total = shares.reduce(function (a, b) { return a + b; }, 0);
+    const shares = []; for (let i = 0; i < count; i++) shares.push(unit);
+    const total = unit * count;
     return { unit: unit, shares: shares, displayedTotal: total, lostYen: price - total };
   }
 
@@ -161,10 +189,27 @@
     Object.keys(D.itemTotals).forEach(function (name) {
       if (!productByName(name)) errs.push({ label: "月間商品が商品マスタに無い:" + name, got: 0, want: 1, diff: -1 });
     });
-    // 折半：余りを配賦して合計が元金額に一致するか
+    // 当日集計が伝票から導出されて観測値と一致するか（画面の固定値をやめた分、ここで守る）
+    const td = todayAggregate(D.day0824.bills, D.day0824.attendance);
+    check(errs, "当日 総売上",   td.all.sales,        D.day0824.expected.totalSales);
+    check(errs, "当日 未精算",   td.unsettled.sales,  D.day0824.expected.unsettled);
+    check(errs, "当日 精算済",   td.settled.sales,    D.day0824.expected.settled);
+    check(errs, "当日 女子給料", td.joshiPay,         D.day0824.expected.joshiPay);
+    check(errs, "当日 現金",     td.all.cash,         47900);
+    check(errs, "当日 カード",   td.all.card,         7300);
+    check(errs, "当日 組数",     td.all.groups,       3);
+    check(errs, "当日 客数",     td.all.guests,       4);
+    check(errs, "当日 客単価",   td.all.perGuest,     13800);
+    check(errs, "当日 未精算客単価", td.unsettled.perGuest, 15967);
+    check(errs, "当日 精算済客単価", td.settled.perGuest,   7300);
+    check(errs, "当日 女子売上", td.all.joshiSales,   47900);
+    check(errs, "当日 女子売上(未精算)", td.unsettled.joshiSales, 47900);
+    check(errs, "当日 女子売上(精算済)", td.settled.joshiSales,   0);
+    // 折半：本家と同じく1人3,333円・合計9,999円（1円ズレる）を再現しているか
     const sp = splitBill(10000, 3);
-    check(errs, "折半10000/3 合計一致", sp.displayedTotal, 10000);
-    check(errs, "折半10000/3 端数ロス", sp.lostYen, 0);
+    check(errs, "折半10000/3 1人あたり", sp.unit, 3333);
+    check(errs, "折半10000/3 表示合計", sp.displayedTotal, 9999);
+    check(errs, "折半10000/3 欠ける円", sp.lostYen, 1);
     return errs; // [] なら全一致
   }
   function check(errs, label, got, want) {
@@ -172,7 +217,7 @@
   }
 
   global.CALC = {
-    staffPayroll: staffPayroll, drinkBack, nominationBack, castPayroll, workedHours, unitPrice,
+    staffPayroll: staffPayroll, todayAggregate: todayAggregate, billTotal: billTotal, drinkBack, nominationBack, castPayroll, workedHours, unitPrice,
     monthAggregate, splitBill, validateCalcFixtures, productByName,
   };
 })(typeof window !== "undefined" ? window : globalThis);

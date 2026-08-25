@@ -1,5 +1,5 @@
 /* Dシステム改 - data.js
- * 2026年8月「Lounge Lumina」の実データ（観測ログ 01 より・1円一致の元）
+ * 2026年8月「草加 Lua」の実データ（観測ログ 01 より・1円一致の元）
  * 表示値は原則そのまま observed をseed。計算エンジンは 8/24 の実伝票で検証。
  */
 (function (global) {
@@ -7,7 +7,8 @@
 
   // ---- 店舗設定（計算パラメータ・確定値） ----
   const store = {
-    name: "Lounge Lumina",
+    registerFloat: 30000,   // 前日から繰り越す釣銭（レジ精算の理論値に使う）
+    name: "草加 Lua",
     openHour: 16,                 // 営業日境界
     joshiClosingDay: 99,          // 女子報酬締め日（99=月末）
     reqBackAmount: 500,           // リクエストバック金額(¥/回)
@@ -29,36 +30,70 @@
 
   // ---- キャスト（源氏名/ID/属性/時給1部/時給2部/厚生費%/指名バック個別） ----
   const casts = [
-    { id: 110, name: "あや☆",   attr: "normal",   wage1: 2100, wage2: 0, welfare: 10 },
-    { id: 180, name: "みお🌙", attr: "normal",   wage1: 2000, wage2: 0, welfare: 10 },
-    { id: 213, name: "さくら🌻", attr: "dispatch", wage1: 2000, wage2: 0, welfare: 10 },
-    { id: 238, name: "ゆい☆", attr: "normal",   wage1: 1800, wage2: 0, welfare: 10 },
-    { id: 131, name: "のあ☆",   attr: "normal",   wage1: 1900, wage2: 0, welfare: 10 },
-    { id: 241, name: "れい🔔",   attr: "normal",   wage1: 1600, wage2: 0, welfare: 10 },
-    { id: 187, name: "ひな❄️",   attr: "normal",   wage1: 1800, wage2: 0, welfare: 10 },
-    { id: 244, name: "まや🎣",   attr: "normal",   wage1: 1700, wage2: 0, welfare: 10 },
-    { id: 245, name: "える🌹",   attr: "normal",   wage1: 1600, wage2: 0, welfare: 10 },
-    { id: 230, name: "かな🍖",   attr: "normal",   wage1: 1500, wage2: 0, welfare: 10 },
+    { id: 110, name: "べる☆",   attr: "normal",   wage1: 2100, wage2: 0, welfare: 10 },
+    { id: 180, name: "しずく🌙", attr: "normal",   wage1: 2000, wage2: 0, welfare: 10 },
+    { id: 213, name: "はるか🌻", attr: "dispatch", wage1: 2000, wage2: 0, welfare: 10 },
+    { id: 238, name: "みずき☆", attr: "normal",   wage1: 1800, wage2: 0, welfare: 10 },
+    { id: 131, name: "リリ☆",   attr: "normal",   wage1: 1900, wage2: 0, welfare: 10 },
+    { id: 241, name: "りん🔔",   attr: "normal",   wage1: 1600, wage2: 0, welfare: 10 },
+    { id: 187, name: "ゆき❄️",   attr: "normal",   wage1: 1800, wage2: 0, welfare: 10 },
+    { id: 244, name: "りく🎣",   attr: "normal",   wage1: 1700, wage2: 0, welfare: 10 },
+    { id: 245, name: "れん🌹",   attr: "normal",   wage1: 1600, wage2: 0, welfare: 10 },
+    { id: 230, name: "らん🍖",   attr: "normal",   wage1: 1500, wage2: 0, welfare: 10 },
   ];
 
   // ---- スタッフ ----
   const staff = [
-    { id: 1, name: "タカシ", daily: 10000, welfare: 0, since: "2025-05" },
-    { id: 2, name: "ケンジ", daily: 10000, welfare: 0, since: "2026-07" },
+    { id: 1, name: "たかひろ", daily: 10000, welfare: 0, since: "2025-05" },
+    { id: 2, name: "けんたろう", daily: 10000, welfare: 0, since: "2026-07" },
   ];
 
   // ---- 商品（単価・バック額は整数円で保持＝端数ズレ防止） ----
+  // 本家の商品マスタ全40品（観測ログ330-343行）。active=false は本家で「未使用」の品。
+  // ★実績あり(今月数量あり)の品は price/backAmt が観測値。未観測の品は price 0 = 未登録扱い。
   const products = [
-    { no: 4,  name: "キャストドリンクS", price: 1000,  backAmt: 200,  cat: "drink"     },
-    { no: 6,  name: "★キャストショット", price: 2500,  backAmt: 500,  cat: "shot"      },
-    { no: 10, name: "テキーラショット各種", price: 2000, backAmt: 500, cat: "shot"      },
-    { no: 12, name: "クライナー",         price: 1500,  backAmt: 500,  cat: "shot"      },
-    { no: 13, name: "コカレロ",           price: 2500,  backAmt: 500,  cat: "shot"      },
-    { no: 5,  name: "ジャックダニエル",   price: 0,     backAmt: 0,    cat: "bottle"    }, // 単価未観測(0=未登録)
-    { no: 15, name: "フード800",          price: 800,   backAmt: 50,   cat: "food"      },
-    { no: 31, name: "モエN.I.R",          price: 35000, backAmt: 4000, cat: "champagne" },
-    { no: 34, name: "ヴーヴ白",           price: 28000, backAmt: 4000, cat: "champagne" },
-    { no: 36, name: "ヴーヴロゼ",         price: 30000, backAmt: 4000, cat: "champagne" },
+    { no: 1,  name: "オリシャンコンプリート",          price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 2,  name: "【D】ランボルギーニ プラチナ",    price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 3,  name: "【D】ランボルギーニ イエロー",    price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 4,  name: "キャストドリンクS",               price: 1000,  backAmt: 200,  cat: "drink",     active: true  },
+    { no: 5,  name: "キャストドリンク W",              price: 0,     backAmt: 0,    cat: "drink",     active: false },
+    { no: 6,  name: "★キャストショット",               price: 2500,  backAmt: 500,  cat: "shot",      active: true  },
+    { no: 7,  name: "ゲストドリンク",                  price: 0,     backAmt: 0,    cat: "drink",     active: false },
+    { no: 8,  name: "栓抜きドリンク",                  price: 0,     backAmt: 0,    cat: "drink",     active: false },
+    { no: 9,  name: "ピッチャー",                      price: 0,     backAmt: 0,    cat: "drink",     active: false },
+    { no: 10, name: "テキーラショット各種",            price: 2000,  backAmt: 500,  cat: "shot",      active: true  },
+    { no: 11, name: "テキーラボール",                  price: 0,     backAmt: 0,    cat: "shot",      active: false },
+    { no: 12, name: "クライナー",                      price: 1500,  backAmt: 500,  cat: "shot",      active: true  },
+    { no: 13, name: "コカレロ",                        price: 2500,  backAmt: 500,  cat: "shot",      active: true  },
+    { no: 14, name: "フード500",                       price: 500,   backAmt: 31,   cat: "food",      active: false },
+    { no: 15, name: "フード800",                       price: 800,   backAmt: 50,   cat: "food",      active: true  },
+    { no: 16, name: "フード1000",                      price: 1000,  backAmt: 63,   cat: "food",      active: false },
+    { no: 17, name: "フード1500",                      price: 1500,  backAmt: 94,   cat: "food",      active: false },
+    { no: 18, name: "フード2000",                      price: 2000,  backAmt: 125,  cat: "food",      active: false },
+    { no: 19, name: "フード2500",                      price: 2500,  backAmt: 156,  cat: "food",      active: false },
+    { no: 20, name: "フード3000",                      price: 3000,  backAmt: 188,  cat: "food",      active: false },
+    { no: 21, name: "ポンパ各種",                      price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 22, name: "ミニカフェパ各種",                price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 23, name: "カフェパ各種",                    price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 24, name: "カフェパ季節限定",                price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 25, name: "プラチナム各種",                  price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 26, name: "マバム各種",                      price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 27, name: "フェリスタス",                    price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 28, name: "クワトロカヴァ",                  price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 29, name: "モエ白",                          price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 30, name: "モエロゼ",                        price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 31, name: "モエN.I.R",                       price: 35000, backAmt: 4000, cat: "champagne", active: true  },
+    { no: 32, name: "モエネクター",                    price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 33, name: "モエアイスアンペリア",            price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 34, name: "ヴーヴ白",                        price: 28000, backAmt: 4000, cat: "champagne", active: true  },
+    { no: 35, name: "ヴーヴイエロー",                  price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 36, name: "ヴーヴロゼ",                      price: 30000, backAmt: 4000, cat: "champagne", active: true  },
+    { no: 37, name: "ベルエポック",                    price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 38, name: "クリュグ白",                      price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 39, name: "ベルエポックロゼ",                price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    { no: 40, name: "エンジェル",                      price: 0,     backAmt: 0,    cat: "champagne", active: false },
+    // 商品別集計に実績として現れるが40品リストに番号が無い品（観測ログ266行）
+    { no: 41, name: "ジャックダニエル",                price: 0,     backAmt: 0,    cat: "bottle",    active: true  },
   ];
 
   // ---- 入出金項目 ----
@@ -86,9 +121,9 @@
 
   // ---- タグ（集客担当） ----
   const tags = [
-    { id: 1, name: "タカシ", color: "#3fb950", hall: true },
-    { id: 2, name: "ヨウ",     color: "#79c0ff", hall: true },
-    { id: 3, name: "ケンジ", color: "#8b949e", hall: true },
+    { id: 1, name: "たかひろ", color: "#3fb950", hall: true },
+    { id: 2, name: "よも",     color: "#79c0ff", hall: true },
+    { id: 3, name: "けんたろう", color: "#8b949e", hall: true },
   ];
 
   // ---- 顧客属性(31) / カスタム項目(7) / ランク基準 ----
@@ -192,48 +227,48 @@
     // 伝票（会計）
     bills: [
       { no:1, uuid:"FD3BCA02-EA2F-4D81-9B72-3B1DE95A1C1A", in:"21:30", out:"22:20", table:1, guests:1,
-        field:[{cast:"ひな❄️", count:1, amount:1000}], req:[], dohan:[],
+        field:[{cast:"ゆき❄️", count:1, amount:1000}], req:[], dohan:[],
         cash:0, card:7300, credit:0, service:1800, settled:true },
       { no:2, uuid:"A1000000-0000-0000-0000-000000000002", in:"21:55", out:"00:25", table:3, guests:2,
-        req:[{cast:"みお🌙", count:3, amount:3600}], dohan:[{cast:"みお🌙", count:1, amount:3000}], field:[],
+        req:[{cast:"しずく🌙", count:3, amount:3600}], dohan:[{cast:"しずく🌙", count:1, amount:3000}], field:[],
         reqSub:34100, cash:41000, card:0, credit:0, settled:false },
       { no:3, uuid:"A1000000-0000-0000-0000-000000000003", in:"23:15", out:"00:05", table:1, guests:1,
-        req:[{cast:"みお🌙", count:1, amount:1200}], dohan:[], field:[],
+        req:[{cast:"しずく🌙", count:1, amount:1200}], dohan:[], field:[],
         reqSub:5700, cash:6900, card:0, credit:0, settled:false },
     ],
     // 勤怠（開始/終了・当日の商品バック明細）＝リアルタイム勤怠報告の観測状態
     attendance: [
-      { cast:"ひな❄️", start:"21:00", end:null,
+      { cast:"ゆき❄️", start:"21:00", end:null,
         drinks:[{name:"キャストドリンクS", qty:5}],
         field:{count:1}, req:{count:0}, dohan:{count:0}, bonus:0, minus:0, dailyPay:0 },
-      { cast:"みお🌙", start:"21:00", end:null,
+      { cast:"しずく🌙", start:"21:00", end:null,
         drinks:[{name:"キャストドリンクS", qty:5}],
         req:{count:4}, dohan:{count:1}, field:{count:0}, bonus:0, minus:0, dailyPay:0 },
-      { cast:"れい🔔", start:"21:00", end:null,
+      { cast:"りん🔔", start:"21:00", end:null,
         drinks:[{name:"キャストドリンクS", qty:3},{name:"クライナー", qty:1}],
         req:{count:0}, dohan:{count:0}, field:{count:0}, bonus:0, minus:0, dailyPay:0 },
     ],
     // 観測された正解（リアルタイム勤怠報告＝検証用の期待値）
     expected: {
       totalSales:55200, unsettled:47900, settled:7300, joshiPay:6840,
-      pay: { "ひな❄️":{back:1500, gross:1500, welfare:150, net:1350},
-             "みお🌙":{back:5000, gross:5000, welfare:500, net:4500},
-             "れい🔔":{back:1100, gross:1100, welfare:110, net:990} },
+      pay: { "ゆき❄️":{back:1500, gross:1500, welfare:150, net:1350},
+             "しずく🌙":{back:5000, gross:5000, welfare:500, net:4500},
+             "りん🔔":{back:1100, gross:1100, welfare:110, net:990} },
     },
   };
 
   // ---- デモ顧客・キープ（顧客管理/キープ管理の画面用・架空）----
   const customers = [
-    { no: 1, name: "山本 様", rank: "S", visits: 24, last: "2026-08-22", first: "2025-03-10", avg: 42000, main: "みお🌙", attrs: ["常連", "太客候補", "高単価"], phone: "090-xxxx-1234" },
-    { no: 2, name: "中村 様", rank: "A", visits: 12, last: "2026-08-20", first: "2025-07-02", avg: 28000, main: "あや☆", attrs: ["リピート", "本指名安定"], phone: "090-xxxx-5678" },
-    { no: 3, name: "小林 様", rank: "B", visits: 6, last: "2026-08-15", first: "2026-02-18", avg: 19000, main: "さくら🌻", attrs: ["場内多め"], phone: "" },
-    { no: 4, name: "加藤 様", rank: "C", visits: 3, last: "2026-08-08", first: "2026-06-30", avg: 15000, main: "ひな❄️", attrs: ["新規", "呼び戻し候補"], phone: "" },
-    { no: 5, name: "渡辺 様", rank: "D", visits: 0, last: "2026-05-01", first: "2025-01-12", avg: 12000, main: "", attrs: ["休眠", "要フォロー"], phone: "" },
+    { no: 1, name: "田中 様", rank: "S", visits: 24, last: "2026-08-22", first: "2025-03-10", avg: 42000, main: "しずく🌙", attrs: ["常連", "太客候補", "高単価"], phone: "090-xxxx-1234" },
+    { no: 2, name: "佐藤 様", rank: "A", visits: 12, last: "2026-08-20", first: "2025-07-02", avg: 28000, main: "べる☆", attrs: ["リピート", "本指名安定"], phone: "090-xxxx-5678" },
+    { no: 3, name: "鈴木 様", rank: "B", visits: 6, last: "2026-08-15", first: "2026-02-18", avg: 19000, main: "はるか🌻", attrs: ["場内多め"], phone: "" },
+    { no: 4, name: "高橋 様", rank: "C", visits: 3, last: "2026-08-08", first: "2026-06-30", avg: 15000, main: "ゆき❄️", attrs: ["新規", "呼び戻し候補"], phone: "" },
+    { no: 5, name: "伊藤 様", rank: "D", visits: 0, last: "2026-05-01", first: "2025-01-12", avg: 12000, main: "", attrs: ["休眠", "要フォロー"], phone: "" },
   ];
   const keeps = [
-    { product: "ヴーヴロゼ", price: 30000, remain: "1/2本", start: "2026-08-08", expire: "2026-11-08", customer: "山本 様", nameTag: "T.T", memo: "誕生日用" },
-    { product: "モエN.I.R", price: 35000, remain: "満量", start: "2026-08-21", expire: "2026-11-21", customer: "中村 様", nameTag: "S", memo: "" },
-    { product: "ジャックダニエル", price: 15000, remain: "残少", start: "2026-06-01", expire: "2026-09-01", customer: "小林 様", nameTag: "SUZUKI", memo: "期限間近" },
+    { product: "ヴーヴロゼ", price: 30000, remain: "1/2本", start: "2026-08-08", expire: "2026-11-08", customer: "田中 様", nameTag: "T.T", memo: "誕生日用" },
+    { product: "モエN.I.R", price: 35000, remain: "満量", start: "2026-08-21", expire: "2026-11-21", customer: "佐藤 様", nameTag: "S", memo: "" },
+    { product: "ジャックダニエル", price: 15000, remain: "残少", start: "2026-06-01", expire: "2026-09-01", customer: "鈴木 様", nameTag: "SUZUKI", memo: "期限間近" },
   ];
 
   global.DATA = {

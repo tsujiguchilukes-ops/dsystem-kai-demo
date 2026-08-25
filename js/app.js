@@ -197,6 +197,33 @@
     saveStore(st);
     return true;
   }
+  // 声で拾った設定は、確認してから保存する（聞き間違いで黙って書き換えないため）
+  function confirmSetting(spec, v) {
+    const before = getSetting(spec.key);
+    const show = function (x) { return spec.type === 'pct' ? x + '%' : Number(x).toLocaleString('ja-JP') + spec.unit; };
+    const body = '<div style="font-size:15px;line-height:1.9">'
+      + '<div class="kv"><span class="k">項目</span><span class="v">' + esc(spec.aliases[0]) + '</span></div>'
+      + '<div class="kv"><span class="k">今の値</span><span class="v">' + esc(show(before)) + '</span></div>'
+      + '<div class="kv"><span class="k">新しい値</span><span class="v" style="color:var(--green);font-weight:700">' + esc(show(v)) + '</span></div>'
+      + '</div><div class="muted-note">この内容で登録します。違うときは「キャンセル」を押してください。</div>';
+    modal('この設定に変更しますか？', body, function () {
+      if (setSetting(spec.key, v)) {          // 失敗時は setSetting 側がトーストを出す＝成功風の嘘を出さない
+        pushAudit('設定変更', spec.aliases[0], show(before), show(v));
+        toast('「' + spec.aliases[0] + '」を ' + show(v) + ' に登録しました');
+        closeModal();
+        if (currentId === 'settings') render('settings');
+      }
+    }, '登録する');
+  }
+  // 変更履歴（誰が・いつ・何を・前→後）。給与トラブル時に追えるようにする
+  function pushAudit(action, target, before, after) {
+    try {
+      const st = loadStore(); st.audit = st.audit || [];
+      st.audit.push({ at: new Date().toISOString(), action: action, target: target, before: String(before), after: String(after) });
+      if (st.audit.length > 500) st.audit = st.audit.slice(-500);
+      saveStore(st);
+    } catch (e) {}
+  }
   // 全角/カンマ/漢数字(千・万・百)をざっくり数値化
   function normNum(s){
     if(!s) return NaN;
@@ -232,9 +259,9 @@
     if(found){
       const val = normNum(text);
       if(Number.isFinite(val)){
-        setSetting(found.s.key, found.s.type==='int'?Math.round(val):val);
-        toast('「'+found.s.aliases[0]+'」を '+ (found.s.type==='pct'?val+'%':val.toLocaleString('ja-JP')+found.s.unit) +' に登録しました');
-        if(currentId==='settings') render('settings');
+        const v = found.s.type==='int'?Math.round(val):val;
+        // 声は即保存せず、必ず「これでいいですか」を挟む（聞き間違いで黙って書き換えないため）
+        confirmSetting(found.s, v);
         return true;
       }
     }
@@ -313,6 +340,34 @@
       tt.textContent = bad ? '入力エラー' : (missing ? '未入力あり (' + total.toLocaleString('ja-JP') + ')' : total.toLocaleString('ja-JP'));
       tt.style.color = (bad || missing) ? '#ff5c5c' : '';
     }
+    // 実査(金種合計)と理論値から過不足を出す。ここが0固定だとレジ締めに使えない
+    const note = document.getElementById('cashTheory');
+    const cc = document.getElementById('cashCounted'), cd = document.getElementById('cashDiff');
+    if (note && cc && cd) {
+      const theory = Number(note.getAttribute('data-theory')) || 0;
+      const diff = total - theory;
+      cc.textContent = '¥' + total.toLocaleString('ja-JP');
+      cd.textContent = (diff > 0 ? '+' : '') + '¥' + diff.toLocaleString('ja-JP');
+      cd.style.color = bad ? '#ff5c5c' : (diff === 0 ? 'var(--green)' : (diff < 0 ? '#ff5c5c' : '#b8860b'));
+      cd.title = diff === 0 ? '理論値どおりです' : (diff < 0 ? '理論値より少ないです' : '理論値より多いです');
+    }
+  }
+  // レジ精算を確定して残す（誰がいつ締めたか追えるようにする）
+  function cashClose() {
+    const note = document.getElementById('cashTheory'), cc = document.getElementById('cashCounted');
+    if (!note || !cc) { toast('現金管理の画面で押してください'); return; }
+    const theory = Number(note.getAttribute('data-theory')) || 0;
+    const counted = Number(String(cc.textContent).replace(/[^0-9-]/g, '')) || 0;
+    const diff = counted - theory;
+    if (!confirm('この内容でレジ精算を確定します。\n理論値 ¥' + theory.toLocaleString('ja-JP')
+      + ' / 実査 ¥' + counted.toLocaleString('ja-JP') + ' / 過不足 ' + (diff >= 0 ? '+' : '') + '¥' + diff.toLocaleString('ja-JP')
+      + '\nよろしいですか？')) { toast('精算を取りやめました'); return; }
+    const st = loadStore();
+    st.cashClose = st.cashClose || {};
+    st.cashClose['2026-08-24'] = { theory: theory, counted: counted, diff: diff, at: new Date().toISOString() };
+    saveStore(st);
+    pushAudit('レジ精算', '2026-08-24', '理論 ' + theory, '実査 ' + counted + '（過不足 ' + diff + '）');
+    toast(diff === 0 ? 'レジ精算を確定しました（過不足なし）' : 'レジ精算を確定しました（過不足 ' + (diff > 0 ? '+' : '') + diff.toLocaleString('ja-JP') + '円）');
   }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]; }); }
@@ -404,6 +459,7 @@
     w.document.close(); setTimeout(function () { try { w.print(); } catch (e) {} }, 400);
   }
   function newBill() {
+    const yen = UI.yen, t = function (k) { return esc(DATA.t(k)); }; // ui.js のIIFE内には無いのでここで用意
     const castOpts = DATA.casts.map(function (c) { return '<option>' + esc(c.name) + '</option>'; }).join('');
     const prodOpts = DATA.products.filter(function (p) { return p.price > 0; }).map(function (p) { return '<option value="' + esc(p.name) + '">' + esc(p.name) + ' (' + yen(p.price) + ')</option>'; }).join('');
     const tagOpts = '<option value="">なし</option>' + DATA.tags.map(function (t) { return '<option>' + esc(t.name) + '</option>'; }).join('');
@@ -597,7 +653,16 @@
           if (raw && typeof raw === 'object') {
             if (raw.inputs && typeof raw.inputs === 'object') Object.keys(raw.inputs).forEach(function (k) { const v = raw.inputs[k]; if (typeof v === 'string' && v.length <= 200) clean.inputs[k] = v; });
             if (raw.store && typeof raw.store === 'object') Object.keys(raw.store).forEach(function (k) { const v = raw.store[k]; if (typeof v === 'number' && Number.isFinite(v)) clean.store[k] = v; });
+            // 伝票・お客さまも必ず戻す（ここを捨てると「戻したのに消えた」になる）
+            if (Array.isArray(raw.bills)) clean.bills = raw.bills.filter(function (b) { return b && typeof b === 'object'; });
+            if (Array.isArray(raw.customers)) clean.customers = raw.customers.filter(function (c) { return c && typeof c === 'object'; });
+            if (Array.isArray(raw.keeps)) clean.keeps = raw.keeps.filter(function (k) { return k && typeof k === 'object'; });
+            if (raw.attendance && typeof raw.attendance === 'object') clean.attendance = raw.attendance;
+            if (raw.cashClose && typeof raw.cashClose === 'object') clean.cashClose = raw.cashClose;
+            if (Array.isArray(raw.audit)) clean.audit = raw.audit.slice(-500);
           }
+          const nb = (clean.bills || []).length, nc = (clean.customers || []).length;
+          if (!confirm('今のデータを、このバックアップで上書きします。\n（伝票 ' + nb + '件 / お客さま ' + nc + '件）\nよろしいですか？')) { toast('読み込みを取りやめました'); return; }
           saveStore(clean); toast('読み込みました'); location.reload();
         }
         catch (e) { showError('読み込みに失敗しました', String(e && e.message || e), '正しいバックアップJSONを選んでください'); }
@@ -626,7 +691,7 @@
     }, btn);
   }
   global.APP = { go: go, goSub: goSub, toast: toast, backupExport: backupExport, backupImport: backupImport, voiceCommand: voiceCommand, voiceField: voiceField,
-    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable,
+    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable, cashClose: cashClose, cashRecalc: recalcCash,
     toggleCastZero: function (v) { UI.setHideZeroCast(v); render('castItems'); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

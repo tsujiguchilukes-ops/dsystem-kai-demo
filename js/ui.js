@@ -80,13 +80,17 @@
       + card('入金累計', '#f0c020', yen(m.deposit), '',
           [['粗利', '<span class="pos">' + yen(m.grossProfit) + '</span>']])
       + '</div>';
+    // 当日は伝票から導出（固定値を置かない＝伝票を1枚足せば全部動く）
+    const TD = C.todayAggregate(D.day0824.bills, D.day0824.attendance);
+    const st = TD.settled;
     h += '<div class="section-title">当日 <span class="pill">2026/8/24(月)</span></div>';
     h += '<div class="row">'
-      + card('店舗状況', '#8b5cf6', '1<span class="unit">人</span> / 1<span class="unit">組</span>', '',
-          [['客単価', yen(7300)], ['組単価', yen(7300)], [t('本指名') + '本計', yen(0)], ['<span class="mut" style="font-size:11px">※精算済のみ</span>', '<span class="mut" style="font-size:11px">未精算¥47,900はリアルタイム</span>']])
-      + card('売上', '#4a9eff', yen(d0824.salesTotal), '', [['現金', yen(d0824.cash)], ['カード', yen(d0824.card)]])
-      + card('経費', '#ff5c5c', yen(d0824.expenseTotal), '', [['人件費-女子', yen(810)]])
-      + card('入金', '#f0c020', yen(0), '', [['粗利', '<span class="pos">' + yen(d0824.grossProfit) + '</span>']])
+      + card('店舗状況', '#8b5cf6', st.guests + '<span class="unit">人</span> / ' + st.groups + '<span class="unit">組</span>', '',
+          [['客単価', yen(st.perGuest)], ['組単価', yen(st.perGroup)], [t('本指名') + '本計', yen(st.reqHon)],
+           ['<span class="mut" style="font-size:11px">※精算済のみ</span>', '<span class="mut" style="font-size:11px">未精算' + yen(TD.unsettled.sales) + 'はリアルタイム</span>']])
+      + card('売上', '#4a9eff', yen(st.sales), '', [['現金', yen(st.cash)], ['カード', yen(st.card)]])
+      + card('経費', '#ff5c5c', yen(d0824.expenseTotal), '', [['人件費-女子', yen(TD.joshiPay)]])
+      + card('入金', '#f0c020', yen(d0824.deposit || 0), '', [['粗利', '<span class="pos">' + yen(st.sales + (d0824.deposit || 0) - d0824.expenseTotal) + '</span>']])
       + '</div>';
     h += '<div class="card" style="margin-top:16px"><h3><span class="cap" style="background:#3fb950"></span>売上推移</h3>' + salesChart(D.financeDaily) + '</div>';
     return h;
@@ -172,20 +176,22 @@
     let h = '<div class="okbar">🟢 営業中モード（2026/8/24 月）— 未精算も含むライブ集計</div>';
     // 営業日報
     h += '<div class="row" style="margin-bottom:16px">'
-      + kpi('総売上', yen(d.expected.totalSales), '#4a9eff')
-      + kpi('未精算', yen(d.expected.unsettled), '#f0a02c')
-      + kpi('精算済', yen(d.expected.settled), '#3fb950')
-      + kpi('女子給料', yen(d.expected.joshiPay), '#ff8fbf') + '</div>';
+      + kpi('総売上', yen(C.todayAggregate(d.bills, d.attendance).all.sales), '#4a9eff')
+      + kpi('未精算', yen(C.todayAggregate(d.bills, d.attendance).unsettled.sales), '#f0a02c')
+      + kpi('精算済', yen(C.todayAggregate(d.bills, d.attendance).settled.sales), '#3fb950')
+      + kpi('女子給料', yen(C.todayAggregate(d.bills, d.attendance).joshiPay), '#ff8fbf') + '</div>';
     // 営業日報（当日/未精算/精算済 の3列比較・本家同等）
+    const A = C.todayAggregate(d.bills, d.attendance), U = A.unsettled, S = A.settled;
     const report3 = [
-      ['総売上', 55200, 47900, 7300], ['現金売上', 47900, 47900, 0], ['カード売上', 7300, 0, 7300], ['売掛', 0, 0, 0],
-      ['女子売上', 47900, 47900, 0], ['女子給料', 6840, 0, 0],
+      ['総売上', A.all.sales, U.sales, S.sales], ['現金売上', A.all.cash, U.cash, S.cash],
+      ['カード売上', A.all.card, U.card, S.card], ['売掛', A.all.credit, U.credit, S.credit],
+      ['女子売上', A.all.joshiSales, U.joshiSales, S.joshiSales], ['女子給料', A.joshiPay, 0, 0],
     ];
     h += '<div class="card" style="margin-bottom:16px"><h3>営業日報</h3><div class="tablewrap"><table><thead><tr><th class="l">項目</th><th>当日</th><th>未精算</th><th>精算済</th></tr></thead><tbody>'
       + report3.map(function (r) { return '<tr><td class="l">' + r[0] + '</td><td>' + yen(r[1]) + '</td><td>' + yen(r[2]) + '</td><td>' + yen(r[3]) + '</td></tr>'; }).join('')
-      + '<tr><td class="l">客組人数</td><td>3組4名</td><td>2組3名</td><td>1組1名</td></tr>'
-      + '<tr><td class="l">客単価</td><td>' + yen(13800) + '</td><td>' + yen(15967) + '</td><td>' + yen(7300) + '</td></tr>'
-      + '<tr><td class="l">キャスト数</td><td>出勤3人</td><td>店内客3人</td><td>待機—</td></tr>'
+      + '<tr><td class="l">客組人数</td><td>' + A.all.groups + '組' + A.all.guests + '名</td><td>' + U.groups + '組' + U.guests + '名</td><td>' + S.groups + '組' + S.guests + '名</td></tr>'
+      + '<tr><td class="l">客単価</td><td>' + yen(A.all.perGuest) + '</td><td>' + yen(U.perGuest) + '</td><td>' + yen(S.perGuest) + '</td></tr>'
+      + '<tr><td class="l">キャスト数</td><td>出勤' + A.castCount + '人</td><td>店内客' + U.guests + '人</td><td>待機—</td></tr>'
       + '</tbody></table></div><div class="muted-note">「まとめ」は精算済ベース、リアルタイムは未精算(進行中の伝票)も含む。</div></div>';
     // 出勤キャスト
     h += '<div class="card" style="margin-bottom:16px"><h3>現在出勤キャスト</h3><div class="row">'
@@ -285,7 +291,7 @@
   }
   function castItems() {
     // 実績のある商品 × キャスト9人 の完全クロス集計（個数）。CDrinkS実測シェアで各商品を配分。
-    const share = { "みお🌙": 172, "あや☆": 123, "さくら🌻": 83, "ひな❄️": 49, "のあ☆": 47, "ゆい☆": 46, "まや🎣": 44, "れい🔔": 36, "かな🍖": 17 };
+    const share = { "しずく🌙": 172, "べる☆": 123, "はるか🌻": 83, "ゆき❄️": 49, "リリ☆": 47, "みずき☆": 46, "りく🎣": 44, "りん🔔": 36, "らん🍖": 17 };
     const castNames = Object.keys(share);
     let prods = Object.keys(D.itemTotals);
     // grid[cast][prod]
@@ -316,9 +322,9 @@
   function castsScreen() {
     // 観測できた per-cast 指標（名前/勤務日数/時間報酬/給率/残り支給額）。他列は月合計のみ観測。
     const rows = [
-      ['みお🌙', 15, 164666, 37.2, 285360], ['あや☆', 17, 173775, 58, 145402], ['さくら🌻', 9, 96499, 48.7, 136062],
-      ['のあ☆', 3, 36734, 31.3, 49021], ['ひな❄️', 11, 61800, 90.7, 73485], ['まや🎣', 8, 55250, 147, 34344],
-      ['れい🔔', 9, 49334, 125.6, 12680], ['ゆい☆', 11, 73800, 858.5, 56900], ['かな🍖', 7, 27750, 0, 23035],
+      ['しずく🌙', 15, 164666, 37.2, 285360], ['べる☆', 17, 173775, 58, 145402], ['はるか🌻', 9, 96499, 48.7, 136062],
+      ['リリ☆', 3, 36734, 31.3, 49021], ['ゆき❄️', 11, 61800, 90.7, 73485], ['りく🎣', 8, 55250, 147, 34344],
+      ['りん🔔', 9, 49334, 125.6, 12680], ['みずき☆', 11, 73800, 858.5, 56900], ['らん🍖', 7, 27750, 0, 23035],
     ];
     // 月合計（本家 /cast の合計行・観測値）
     const T = { orderSub:1175100, reqSub:2030500, dohanSub:561600, wagePay:739608,
@@ -456,11 +462,22 @@
     h += '<div class="card" style="flex:1;min-width:280px"><h3>金種入力</h3><div class="tablewrap"><table id="cashTable"><thead><tr><th>金種</th><th>枚数</th><th>金額</th></tr></thead><tbody>'
       + denoms.map(function (d) { return '<tr><td>' + num(d) + '</td><td><input type="number" min="0" step="1" value="0" data-denom="' + d + '" data-save-key="cash:denom:' + d + '" style="width:70px"></td><td class="denom-amt">0</td></tr>'; }).join("")
       + '<tr class="total"><td>合計</td><td></td><td id="cashTotal">0</td></tr></tbody></table></div>'
-      + '<div class="row" style="margin-top:10px"><button class="btn sm" onclick="APP.toast(&#39;金種を入力すると自動集計します&#39;)">手動精算</button><button class="btn sm gold" onclick="APP.toast(&#39;自動精算は準備中です&#39;)">自動精算</button></div></div>';
+      + '<div class="row" style="margin-top:10px"><button class="btn sm" onclick="APP.cashRecalc()">再計算</button><button class="btn sm gold" onclick="APP.cashClose()">精算を確定</button></div></div>';
+    // 照合は伝票・入出金から実際に計算する（0固定にしない＝レジ締めに使える）
+    const d = D.day0824, A = C.todayAggregate(d.bills, d.attendance);
+    const opening = D.store.registerFloat || 0;               // 前日から繰り越した釣銭
+    const deposit = d.deposit || 0, withdrawal = d.withdrawal || 0;
+    const theory = opening + A.all.cash + deposit - withdrawal; // 理論値
     h += '<div class="card" style="flex:1;min-width:280px"><h3>照合</h3>'
-      + [['本日釣銭', 0], ['現金売上', 0], ['入金合計', 0], ['出金合計', 0], ['レジ内現金(理論値)', 0], ['レジ内現金(入力)', 0], ['現金過不足', 0], ['預金金額', 0], ['翌日釣銭準備金', 0]]
+      + [['本日釣銭', opening], ['現金売上', A.all.cash], ['入金合計', deposit], ['出金合計', withdrawal],
+         ['レジ内現金(理論値)', theory]]
         .map(function (k) { return '<div class="kv"><span class="k">' + k[0] + '</span><span class="v">' + yen(k[1]) + '</span></div>'; }).join("")
-      + '<div class="muted-note">現金過不足 = レジ内現金(実査) − 理論値。理論値 = 前日釣銭 + 現金売上 + 入金 − 出金。</div></div>';
+      + '<div class="kv"><span class="k">レジ内現金(入力)</span><span class="v" id="cashCounted">' + yen(0) + '</span></div>'
+      + '<div class="kv"><span class="k">現金過不足</span><span class="v" id="cashDiff" style="font-weight:700">' + yen(-theory) + '</span></div>'
+      + '<div class="kv"><span class="k">預金金額</span><span class="v"><input type="number" min="0" value="0" data-save-key="cash:deposit" style="width:120px"></span></div>'
+      + '<div class="kv"><span class="k">翌日釣銭準備金</span><span class="v"><input type="number" min="0" value="' + opening + '" data-save-key="cash:nextfloat" style="width:120px"></span></div>'
+      + '<div class="muted-note" id="cashTheory" data-theory="' + theory + '">現金過不足 = レジ内現金(実査) − 理論値。理論値 = 前日釣銭 + 現金売上 + 入金 − 出金。'
+      + '<br>金種の枚数を入れると、過不足がその場で出ます。</div></div>';
     return h + '</div>';
   }
 
@@ -616,7 +633,7 @@
   function history() {
     return '<div class="card"><h3>変更履歴（監査ログ）</h3><div class="tablewrap"><table><thead><tr><th>日時</th><th class="l">操作</th><th class="l">内容</th></tr></thead><tbody>'
       + '<tr><td>2026-08-24 23:38</td><td class="l">日報更新</td><td class="l">8/24 キャスト勤怠を更新</td></tr>'
-      + '<tr><td>2026-08-24 21:30</td><td class="l">伝票作成</td><td class="l">卓1 / ひな❄️ 場内</td></tr>'
+      + '<tr><td>2026-08-24 21:30</td><td class="l">伝票作成</td><td class="l">卓1 / ゆき❄️ 場内</td></tr>'
       + '</tbody></table></div><div class="muted-note">誰が・いつ・何を・旧値/新値を記録（デモ・実記録は対象外）。</div></div>';
   }
 
