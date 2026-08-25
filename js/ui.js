@@ -2,6 +2,7 @@
 (function (global) {
   "use strict";
   const D = global.DATA, C = global.CALC;
+  let _hideZeroCast = false; // キャスト別商品集計「0個を除外」の状態
   const yen = function (n) { if (!Number.isFinite(n)) return "計算エラー"; return "¥" + n.toLocaleString("ja-JP"); };
   const num = function (n) { if (!Number.isFinite(n)) return "計算エラー"; return n.toLocaleString("ja-JP"); };
   const esc = function (s) {
@@ -106,21 +107,21 @@
     // ヒートマップ（粗利）
     h += '<div class="card" style="margin-bottom:16px"><h3>曜日別 粗利ヒートマップ</h3>' + heatmap(rows) + '</div>';
     // テーブル
-    const cols = ['日付', '現金', 'カード', '売上計', 'リクエスト小計', '同伴小計', '残り支給額', '給率', '男子日払い', '女子日払い', 'マイナス', '出金', '経費計', '粗利'];
+    const cols = ['日付', '現金', '売掛', 'カード', '売上計', 'リクエスト小計', '同伴小計', '残り支給額', '給率', '男子日払い', '女子日払い', 'マイナス', '入金', '出金', '経費計', '粗利'];
     let tb = '<div class="tablewrap"><table><thead><tr>' + cols.map(function (c, i) { return '<th class="' + (i === 0 ? 'l stickyc' : '') + '">' + c + '</th>'; }).join("") + '</tr></thead><tbody>';
     rows.forEach(function (r) {
-      if (r.holiday) { tb += '<tr class="holiday"><td class="l stickyc">' + fmtDate(r) + '</td><td colspan="13" class="l" style="color:var(--muted)">休み</td></tr>'; return; }
+      if (r.holiday) { tb += '<tr class="holiday"><td class="l stickyc">' + fmtDate(r) + '</td><td colspan="15" class="l" style="color:var(--muted)">休み</td></tr>'; return; }
       const neg = r.grossProfit < 0;
       tb += '<tr' + (neg ? ' class="neg-row"' : '') + '>'
         + '<td class="l stickyc">' + fmtDate(r) + '</td>'
-        + cell(r.cash) + cell(r.card) + cell(r.salesTotal) + cell(r.reqSub) + cell(r.dohanSub)
+        + cell(r.cash) + cell(r.credit) + cell(r.card) + cell(r.salesTotal) + cell(r.reqSub) + cell(r.dohanSub)
         + cell(r.remainingPay) + '<td>' + (r.payRate ? r.payRate.toFixed(2) + '%' : '--') + '</td>'
-        + cell(r.maleDaily) + cell(r.femaleDaily) + cell(r.minus) + cell(r.withdrawal) + cell(r.expenseTotal)
+        + cell(r.maleDaily) + cell(r.femaleDaily) + cell(r.minus) + cell(r.deposit) + cell(r.withdrawal) + cell(r.expenseTotal)
         + '<td class="' + (neg ? 'neg' : 'pos') + '">' + num(r.grossProfit) + '</td></tr>';
     });
-    tb += '<tr class="total"><td class="l stickyc">合計</td>' + cell(agg.cash) + cell(agg.card) + cell(agg.salesTotal)
+    tb += '<tr class="total"><td class="l stickyc">合計</td>' + cell(agg.cash) + cell(agg.credit) + cell(agg.card) + cell(agg.salesTotal)
       + cell(agg.reqSub) + cell(agg.dohanSub) + cell(agg.remainingPay) + '<td>' + (D.monthSummary.salesTotal ? (D.monthSummary.laborFemale / D.monthSummary.salesTotal * 100).toFixed(2) + '%' : '--') + '</td>'
-      + cell(agg.maleDaily) + cell(agg.femaleDaily) + cell(agg.minus) + cell(agg.withdrawal) + cell(agg.expenseTotal)
+      + cell(agg.maleDaily) + cell(agg.femaleDaily) + cell(agg.minus) + cell(agg.deposit) + cell(agg.withdrawal) + cell(agg.expenseTotal)
       + '<td class="pos">' + num(agg.grossProfit) + '</td></tr>';
     tb += '</tbody></table></div>';
     h += tb + '<div class="muted-note">赤字日は赤背景でハイライト。ヒートマップの濃さ＝粗利の大きさ。</div>';
@@ -199,7 +200,7 @@
         .concat((b.field || []).map(function (x) { return t('場内指名') + ':' + esc(x.cast) + '(' + x.count + ')'; }))
         .concat((b.dohan || []).map(function (x) { return t('同伴') + ':' + esc(x.cast) + '(' + x.count + ')'; })).join(' / ') || '--';
       const total = (b.cash || 0) + (b.card || 0) + (b.credit || 0);
-      bl += '<tr><td class="l">' + b.no + '</td><td>' + b.in + '</td><td>' + b.out + '</td><td>' + b.table + '</td><td>' + b.guests + '</td>'
+      bl += '<tr><td class="l">' + b.no + '</td><td>' + esc(b.in) + '</td><td>' + esc(b.out) + '</td><td>' + b.table + '</td><td>' + b.guests + '</td>'
         + '<td class="l" style="white-space:normal;max-width:260px">' + nm + '</td>' + cell(b.cash) + cell(b.card)
         + '<td>' + num(total) + '</td><td>' + (b.settled ? '<span class="pos">精算済</span>' : '<span class="mut">未精算</span>') + '</td></tr>';
     });
@@ -286,16 +287,18 @@
     // 実績のある商品 × キャスト9人 の完全クロス集計（個数）。CDrinkS実測シェアで各商品を配分。
     const share = { "みお🌙": 172, "あや☆": 123, "さくら🌻": 83, "ひな❄️": 49, "のあ☆": 47, "ゆい☆": 46, "まや🎣": 44, "れい🔔": 36, "かな🍖": 17 };
     const castNames = Object.keys(share);
-    const prods = Object.keys(D.itemTotals);
+    let prods = Object.keys(D.itemTotals);
     // grid[cast][prod]
     const grid = {}; castNames.forEach(function (c) { grid[c] = {}; });
-    prods.forEach(function (pn) {
+    Object.keys(D.itemTotals).forEach(function (pn) {
       const alloc = distribute(D.itemTotals[pn], castNames.map(function (c) { return share[c]; }));
       castNames.forEach(function (c, i) { grid[c][pn] = alloc[i]; });
     });
+    // 「0個を除外」＝どのキャストも0の商品列を隠す
+    if (_hideZeroCast) prods = prods.filter(function (pn) { return castNames.some(function (c) { return grid[c][pn] > 0; }); });
     let h = '<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">'
       + '<div class="seg"><button onclick="APP.go(\'items\')">商品別</button><button class="on">キャスト別</button></div>'
-      + '<div><label style="margin-right:8px"><input type="checkbox" style="width:auto;min-height:auto"> 0個を除外</label>'
+      + '<div><label style="margin-right:8px"><input type="checkbox"' + (_hideZeroCast ? ' checked' : '') + ' onchange="APP.toggleCastZero(this.checked)" style="width:auto;min-height:auto"> 0個を除外</label>'
       + '<button class="btn sm" onclick="APP.exportCSV(&#39;castitem&#39;)">Excel</button></div></div>';
     h += '<div class="tablewrap"><table><thead><tr><th class="l stickyc">キャスト</th>' + prods.map(function (p) { return '<th>' + esc(p) + '</th>'; }).join('') + '<th>計</th></tr></thead><tbody>';
     const colTot = {}; prods.forEach(function (p) { colTot[p] = 0; }); let grand = 0;
@@ -626,7 +629,7 @@
       + '<div><label>期間(TO)</label><br><input type="date" value="2026-08-24" data-save-key="bills:to"></div>'
       + '<div><label>抽出</label><br><select><option>全て表示</option><option>未精算のみ</option><option>精算済のみ</option></select></div>'
       + '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" style="min-height:auto;width:auto"> 詳細表示</label>'
-      + '<button class="btn sm">検索</button><button class="btn sm">月間反映</button>'
+      + '<button class="btn sm" onclick="APP.toast(&#39;絞り込み（デモ）&#39;)">検索</button><button class="btn sm" onclick="APP.toast(&#39;月間へ反映（デモ）&#39;)">月間反映</button>'
       + '<div style="margin-left:auto"><button class="btn sm gold" onclick="APP.newBill()">＋ 新規伝票</button> <button class="btn sm" onclick="APP.exportCSV(&#39;export&#39;)">Excel</button></div>'
       + '</div><div class="muted-note">日付の絞り込みは最大31日間まで。Excelは表示中の分（25件超は表示件数を変更）。</div></div>';
     // 一覧（本家の列: №/ID/出戻り/営業日/入店/退店/時間/卓/客数/顧客/タグ/指名/サービス料/値引/値増/現金/カード/売掛/合計/状態）
@@ -640,10 +643,10 @@
         .concat((b.dohan || []).map(function (x) { return t('同伴') + esc(x.cast) + '(' + x.count + ')'; })).join(' / ') || '--';
       tSvc += b.service || 0; tCash += b.cash || 0; tCard += b.card || 0; tTotal += total; tGuests += b.guests || 0;
       h += '<tr><td class="l">' + b.no + '</td><td class="l mut" style="font-size:11px">' + b.uuid.slice(0, 8) + '…</td>'
-        + '<td class="mut">—</td><td>' + b.in + '</td><td>' + b.out + '</td><td>' + (b.out ? dur(b.in, b.out) : '--') + '</td>'
-        + '<td>' + b.table + '</td><td>' + b.guests + '</td><td class="mut">—</td><td class="mut">—</td>'
+        + '<td class="mut">—</td><td>' + esc(b.in) + '</td><td>' + esc(b.out) + '</td><td>' + (b.out ? dur(b.in, b.out) : '--') + '</td>'
+        + '<td>' + b.table + '</td><td>' + b.guests + '</td><td class="mut">' + esc(b.customer || '—') + '</td><td class="l">' + esc(b.tag || '—') + '</td>'
         + '<td class="l" style="white-space:normal;max-width:220px;font-size:12px">' + nm + '</td>'
-        + cell(b.service || 0) + '<td class="mut">0</td><td class="mut">0</td>' + cell(b.cash) + cell(b.card)
+        + cell(b.service || 0) + '<td>' + ((b.discount||0)?num(b.discount):'0') + '</td><td>' + ((b.markup||0)?num(b.markup):'0') + '</td>' + cell(b.cash) + cell(b.card)
         + '<td>' + num(total) + '</td><td>' + (b.settled ? '<span class="pos">精算済</span>' : '<span class="mut">未精算</span>') + '</td></tr>';
     });
     h += '<tr class="total"><td>計</td><td></td><td></td><td></td><td></td><td></td><td></td><td>' + tGuests + '</td><td></td><td></td><td></td>'
@@ -655,6 +658,7 @@
 
   global.UI = {
     yen: yen, num: num,
+    setHideZeroCast: function (v) { _hideZeroCast = !!v; },
     screens: {
       summary: { title: 'まとめ', render: summary },
       balance: { title: '収支', render: balance },

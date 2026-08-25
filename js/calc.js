@@ -40,7 +40,9 @@
     const bonus = att.bonus || 0;
     const grossNoBonus = back + wagePay;   // ボーナス分離（二重計上防止）
     const gross = grossNoBonus + bonus;
-    const welfare = Math.round(gross * ((cast.welfare || 0) / 100));
+    // 厚生費比率: キャスト個別優先、無ければ店舗設定をフォールバック
+    const wrate = (cast.welfare != null ? cast.welfare : (D.store.welfareRate * 100)) / 100;
+    const welfare = Math.round(gross * wrate);
     const minus = att.minus || 0;
     const shikyu = gross - welfare - minus;        // 支給額
     const net = shikyu - (att.dailyPay || 0);      // 残り支給額
@@ -48,6 +50,17 @@
       cast: att.cast, back: back, wagePay: wagePay, bonus: bonus,
       gross: gross, welfare: welfare, minus: minus, shikyu: shikyu, dailyPay: att.dailyPay || 0, net: net,
     };
+  }
+  // スタッフ給与（日給ベース。キャストとは別計算）
+  function staffPayroll(staff, row) {
+    row = row || {};
+    const gross = staff.daily || 0; // デモ: 出勤=日給
+    const welfare = Math.round(gross * ((staff.welfare || 0) / 100));
+    const minus = (row.late || 0) + (row.absent || 0) + (row.pickup || 0) + (row.fine || 0);
+    const bonus = row.bonus || 0;
+    const shikyu = gross + bonus - welfare - minus;
+    const net = shikyu - (row.dailyPay || 0);
+    return { back: 0, gross: gross + bonus, welfare: welfare, shikyu: shikyu, net: net, dailyPay: row.dailyPay || 0 };
   }
 
   function workedHours(start, end) {
@@ -159,7 +172,7 @@
   }
 
   global.CALC = {
-    drinkBack, nominationBack, castPayroll, workedHours, unitPrice,
+    staffPayroll: staffPayroll, drinkBack, nominationBack, castPayroll, workedHours, unitPrice,
     monthAggregate, splitBill, validateCalcFixtures, productByName,
   };
 })(typeof window !== "undefined" ? window : globalThis);

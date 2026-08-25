@@ -107,8 +107,10 @@ th.stickyc{background:var(--bg3);z-index:2}
 /* ===== バー・ヒートマップ・ランキング ===== */
 .errbar{background:#fbeae8;border:1px solid #f0c8c2;color:#a8382c;padding:14px 18px;border-radius:14px;margin-bottom:18px;font-size:14px}
 .okbar{background:var(--green-soft);border:1px solid #c9e6d5;color:#12603a;padding:13px 18px;border-radius:14px;margin-bottom:18px;font-size:14px;display:flex;align-items:center;gap:10px;font-weight:600}
-.heat{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;margin-top:8px}
-.heat .d{aspect-ratio:1.5;border-radius:12px;display:flex;flex-direction:column;justify-content:center;align-items:center;font-size:12px;color:#fff;font-weight:700;box-shadow:var(--shadow-sm)}
+.heat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;margin-top:8px}
+.heat>div{min-width:0}
+.heat .d{aspect-ratio:1.5;border-radius:12px;display:flex;flex-direction:column;justify-content:center;align-items:center;font-size:12px;color:#fff;font-weight:700;box-shadow:var(--shadow-sm);overflow:hidden}
+@media(max-width:520px){.heat{gap:4px}.heat .d{font-size:11px;border-radius:9px}}
 .rank{display:flex;align-items:center;gap:14px;padding:12px 0;border-top:1px solid var(--line)}
 .rank:first-child{border-top:none}
 .rank .no{width:30px;height:30px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:var(--muted)}

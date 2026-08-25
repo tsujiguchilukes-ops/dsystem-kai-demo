@@ -78,6 +78,7 @@
     try { localStorage.setItem(SKEY, JSON.stringify(o)); markSaved(); }
     catch (e) { showError('保存に失敗しました', String(e && e.message || e), 'ブラウザのプライベートモード/容量を確認してください'); }
   }
+  function persistData() { const st = loadStore(); st.bills = DATA.day0824.bills; st.customers = DATA.customers; saveStore(st); }
   function markSaved() {
     const p = document.getElementById('ymPill');
     if (p) { p.textContent = '保存済 ' + new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }); setTimeout(function () { p.textContent = '2026年 08月'; }, 2500); }
@@ -134,19 +135,25 @@
   function recalcReportRow(cast) {
     const row = document.querySelector('#content tr[data-rrow="' + cssEsc(cast) + '"]');
     if (!row) return;
-    const found = (DATA.day0824.attendance || []).find(function (a) { return a.cast === cast; });
-    const base = found || { cast: cast, start: '', end: null, drinks: [], req: { count: 0 }, dohan: { count: 0 }, field: { count: 0 } };
     const get = function (f) { const el = row.querySelector('[data-rfield="' + f + '"]'); return el ? el.value : ''; };
     const n = function (f) { const v = Number((get(f) || '').trim() || 0); return Number.isFinite(v) && v >= 0 ? v : NaN; };
-    const att = JSON.parse(JSON.stringify(base));
-    att.start = get('start') || att.start;
-    const end = get('end'); att.end = end && end.trim() ? end.trim() : null;
+    const staff = (DATA.staff || []).find(function (s) { return s.name === cast; });
     const bCell = row.querySelector('.r-back'), wCell = row.querySelector('.r-welfare'), gCell = row.querySelector('.r-gross'), nCell = row.querySelector('.r-net');
     try {
       const dp = n('dailyPay'), late = n('late'), ab = n('absent'), pk = n('pickup'), bo = n('bonus');
       if ([dp, late, ab, pk, bo].some(function (x) { return !Number.isFinite(x); })) throw new Error('数値の入力が不正です');
-      att.dailyPay = dp; att.minus = late + ab + pk; att.bonus = bo;
-      const p = CALC.castPayroll(att);
+      let p;
+      if (staff) {
+        p = CALC.staffPayroll(staff, { dailyPay: dp, late: late, absent: ab, pickup: pk, bonus: bo });
+      } else {
+        const found = (DATA.day0824.attendance || []).find(function (a) { return a.cast === cast; });
+        const base = found || { cast: cast, start: '', end: null, drinks: [], req: { count: 0 }, dohan: { count: 0 }, field: { count: 0 } };
+        const att = JSON.parse(JSON.stringify(base));
+        att.start = get('start') || att.start;
+        const end = get('end'); att.end = end && end.trim() ? end.trim() : null;
+        att.dailyPay = dp; att.minus = late + ab + pk; att.bonus = bo;
+        p = CALC.castPayroll(att);
+      }
       bCell.textContent = p.back.toLocaleString('ja-JP');
       if (gCell) gCell.textContent = p.gross.toLocaleString('ja-JP');
       wCell.textContent = p.welfare.toLocaleString('ja-JP');
@@ -156,6 +163,13 @@
     }
   }
   function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+  // data-save-key "cust:<no>:<field>" をDATA.customersへ反映（分析・キープ画面でも一致させる）
+  function applyCustInput(key, val) {
+    const m = String(key).match(/^cust:([^:]+):(name|tel)$/); if (!m) return;
+    const cust = (DATA.customers || []).find(function (c) { return String(c.no) === m[1]; }); if (!cust) return;
+    if (m[2] === 'name') cust.name = val; else cust.phone = val;
+    if (typeof persistData === 'function') persistData();
+  }
 
   // ===== 音声入力（設定を声で編集）=====
   // 編集できる設定の一覧（別名で声から特定）
@@ -359,14 +373,14 @@
     modal('新規お客さま', body, function () {
       const v = function (id) { return document.getElementById(id).value; };
       if (!v('ncName').trim()) { toast('名前を入力してください'); return; }
-      DATA.customers.push({ no: DATA.customers.length + 1, name: v('ncName'), rank: 'C', visits: 0, last: '—', first: '2026-08-25', avg: 0, main: v('ncMain'), attrs: ['新規'], phone: v('ncTel') });
+      DATA.customers.push({ no: DATA.customers.length + 1, name: v('ncName'), rank: 'C', visits: 0, last: '—', first: '2026-08-25', avg: 0, main: v('ncMain'), attrs: ['新規'], phone: v('ncTel') }); persistData();
       closeModal(); toast('お客さまを登録しました'); render('customers', 'list');
     }, '登録する');
   }
   function copyTable() {
     const tb = document.querySelector('#content table'); if (!tb) { toast('コピーする表がありません'); return; }
     const tsv = Array.prototype.map.call(tb.querySelectorAll('tr'), function (tr) {
-      return Array.prototype.map.call(tr.querySelectorAll('th,td'), function (c) { return c.textContent.trim(); }).join('\t');
+      return Array.prototype.map.call(tr.querySelectorAll('th,td'), function (c) { const inp = c.querySelector('input,select'); return (inp ? inp.value : c.textContent.trim()); }).join('\t');
     }).join('\n');
     if (navigator.clipboard) navigator.clipboard.writeText(tsv).then(function () { toast('コピーしました'); }, function () { toast('コピーに失敗'); });
     else toast('このブラウザはコピー未対応');
@@ -374,13 +388,14 @@
   function printPaySlip(kind) {
     const tables = document.querySelectorAll('#content table');
     let inner = '';
-    Array.prototype.forEach.call(tables, function (tb) { inner += tb.outerHTML; });
+    Array.prototype.forEach.call(tables, function (tb) { const cl = tb.cloneNode(true); cl.querySelectorAll('input,select').forEach(function (el) { const td = el.closest('td'); if (td) td.textContent = el.value; }); inner += cl.outerHTML; });
     const w = window.open('', '_blank', 'width=900,height=1000');
     if (!w) { toast('ポップアップを許可してください'); return; }
     w.document.write('<!DOCTYPE html><meta charset="utf-8"><title>報酬明細 2026年8月</title>'
       + '<style>body{font-family:"Hiragino Sans",sans-serif;padding:24px;color:#22271d}'
       + 'h1{font-size:20px}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:10px}'
-      + 'th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}th,td:first-child{text-align:left}'
+      + 'th,td{border:1px solid #4a5260;padding:7px 9px;text-align:right}th,td:first-child{text-align:left}'
+      + 'body{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
       + '@media print{button{display:none}}</style>'
       + '<h1>報酬明細 — ' + (kind === 'staff' ? 'スタッフ' : 'キャスト') + ' / 2026年8月（Lounge）</h1>'
       + '<button onclick="print()" style="padding:8px 16px;margin:8px 0">印刷 / PDF保存</button>' + inner);
@@ -414,10 +429,13 @@
       + '<div style="flex:1;min-width:150px">' + g('現金', '<input id="nbCash" type="number" min="0" value="0" style="width:100%">') + '</div>'
       + '<div style="flex:1;min-width:150px">' + g('カード', '<input id="nbCard" type="number" min="0" value="0" style="width:100%">') + '</div>'
       + '</div>'
-      + '<div class="muted-note">指名回数×バック額、商品個数×単価×バック率が、勤怠報告の給与に自動反映されます。</div>';
+      + '<div class="muted-note">登録すると伝票一覧に追加され、売上・現金・カードに反映されます。給与は勤怠報告の指名回数・商品個数から計算されます。</div>';
     modal('新規伝票（明細入力）', body, function () {
       const v = function (id) { return document.getElementById(id).value; };
       const nv = function (id) { return Number(v(id)) || 0; };
+      const timeRe = /^([01]?\d|2[0-3]):[0-5]\d$/;
+      if (!timeRe.test(v('nbIn').trim()) || !timeRe.test(v('nbOut').trim())) { toast('入店/退店は HH:MM で入力してください'); return; }
+      const guests = nv('nbGuests'); if (!Number.isInteger(guests) || guests <= 0) { toast('客数は1以上で入力してください'); return; }
       const prod = v('nbProd'), qty = nv('nbQty');
       const bill = {
         no: (DATA.day0824.bills.length + 1), uuid: 'NEW-' + Date.now().toString(16).toUpperCase(),
@@ -428,7 +446,7 @@
         service: nv('nbSvc'), discount: nv('nbDisc'), tag: v('nbTag'),
         cash: nv('nbCash'), card: nv('nbCard'), credit: 0, settled: false,
       };
-      DATA.day0824.bills.push(bill);
+      DATA.day0824.bills.push(bill); persistData();
       closeModal(); toast('伝票を登録しました（№' + bill.no + '）'); render('bills');
     }, '登録する');
   }
@@ -502,6 +520,10 @@
       const inp = store.inputs || {};
       Object.keys(inp).forEach(function (k) { if (k.indexOf('term:') === 0 && inp[k]) DATA.terms[k.slice(5)] = inp[k]; });
       if (store.store) Object.keys(store.store).forEach(function (k) { DATA.store[k] = store.store[k]; });
+      if (Array.isArray(store.bills)) DATA.day0824.bills = store.bills;
+      if (Array.isArray(store.customers)) DATA.customers = store.customers;
+      // お客様一覧のインライン編集（名前/電話）をDATAへ反映＝分析・キープ画面でも一致
+      Object.keys(inp).forEach(function (k) { if (k.indexOf('cust:') === 0 && inp[k] != null) applyCustInput(k, inp[k]); });
     } catch (e) {}
     buildNav();
     // メニュー(スマホ)
@@ -521,6 +543,7 @@
       if (el.hasAttribute && el.hasAttribute('data-denom')) recalcCash();
       if (el.hasAttribute && el.hasAttribute('data-rcast')) { recalcReportRow(el.getAttribute('data-rcast')); updateReportWarning(); }
       if (el.hasAttribute && el.hasAttribute('data-term')) DATA.terms[el.getAttribute('data-term')] = el.value; // 反映は次画面から
+      if (el.getAttribute && (el.getAttribute('data-save-key') || '').indexOf('cust:') === 0) applyCustInput(el.getAttribute('data-save-key'), el.value);
     });
     // 用語は打ち終わり(change)で1回だけ通知。設定値(data-setting)は保存して反映
     document.getElementById('content').addEventListener('change', function (e) {
@@ -601,7 +624,8 @@
     }, btn);
   }
   global.APP = { go: go, goSub: goSub, toast: toast, backupExport: backupExport, backupImport: backupImport, voiceCommand: voiceCommand, voiceField: voiceField,
-    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable };
+    helpToggle: helpToggle, helpSend: helpSend, helpVoice: helpVoice, helpGo: helpGo, newBill: newBill, exportCSV: exportCSV, printPaySlip: printPaySlip, newCustomer: newCustomer, copyTable: copyTable,
+    toggleCastZero: function (v) { UI.setHideZeroCast(v); render('castItems'); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })(typeof window !== "undefined" ? window : globalThis);
